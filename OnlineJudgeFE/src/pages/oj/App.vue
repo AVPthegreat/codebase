@@ -1,29 +1,29 @@
 <template>
   <div>
-    <NavBar></NavBar>
+    <component
+      :is="isContestRoute ? 'ContestNavBar' : 'NavBar'"
+      v-bind="contestNavBarProps"
+    />
     <div class="content-app">
       <transition name="fadeInUp" mode="out-in">
         <router-view></router-view>
       </transition>
-      <div class="footer">
-        <p v-html="website.website_footer"></p>
-        <p>Powered by <a href="https://github.com/QingdaoU/OnlineJudge">Codebase</a>
-          <span v-if="version">&nbsp; Version: {{ version }}</span>
-        </p>
-      </div>
+      <div class="footer"></div>
     </div>
     <BackTop></BackTop>
   </div>
 </template>
 
 <script>
-  import { mapActions, mapState } from 'vuex'
+  import { mapActions, mapState, mapGetters } from 'vuex'
   import NavBar from '@oj/components/NavBar.vue'
+  import ContestNavBar from '@oj/components/ContestNavBar.vue'
 
   export default {
     name: 'app',
     components: {
-      NavBar
+      NavBar,
+      ContestNavBar
     },
     data () {
       return {
@@ -43,7 +43,27 @@
       ...mapActions(['getWebsiteConfig', 'changeDomTitle'])
     },
     computed: {
-      ...mapState(['website'])
+      ...mapState(['website']),
+      ...mapGetters([
+        'contest',
+        'OIContestRealTimePermission',
+        'isContestAdmin',
+        'contestRuleType'
+      ]),
+      isContestRoute () {
+        // Only show ContestNavBar for contest-details and its children, not for contest-list
+        const name = this.$route.name
+        return name === 'contest-details' || (name && name.startsWith('contest-') && name !== 'contest-list')
+      },
+      contestNavBarProps () {
+        if (!this.isContestRoute) return {}
+        return {
+          contestTitle: (this.contest && this.contest.title) ? this.contest.title : '',
+          showSubmissions: this.OIContestRealTimePermission,
+          showRank: this.OIContestRealTimePermission,
+          showAdminHelper: this.isContestAdmin && this.contestRuleType === 'ACM'
+        }
+      }
     },
     watch: {
       'website' () {
@@ -75,14 +95,14 @@
 
   @media screen and (max-width: 1200px) {
   .content-app {
-    margin-top: 160px;
+    margin-top: 100px;
     padding: 0 2%;
   }
 }
 
 @media screen and (min-width: 1200px) {
   .content-app {
-    margin-top: 80px;
+    margin-top: 100px;
     padding: 0 2%;
   }
 }

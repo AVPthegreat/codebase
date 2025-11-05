@@ -17,9 +17,6 @@
       <transition name="fadeInUp" mode="out-in">
         <router-view></router-view>
       </transition>
-      <div class="footer">
-        Build Version: {{ version }}
-      </div>
     </div>
 
     <el-dialog :title="$t('m.Latex_Editor')" :visible.sync="katexVisible">
