@@ -169,6 +169,28 @@ export default {
       }
     })
   },
+  contestStart (contestID) {
+    return ajax('contest/start', 'post', { data: { contest_id: contestID } })
+  },
+  contestStop (attemptId) {
+    return ajax('contest/stop', 'post', { data: { attempt_id: attemptId } })
+  },
+  contestProctor (attemptId, payload = {}) {
+    return ajax('contest/proctor', 'post', { data: { attempt_id: attemptId, ...payload } })
+  },
+  getContestUserOverview (contestID) {
+    return ajax('contest/user_overview', 'get', { params: { contest_id: contestID } })
+  },
+  getContestUserAttempts () {
+    return ajax('contest/user_attempts', 'get')
+  },
+  getContestProctoringMonitor (contestID = null) {
+    const params = {}
+    if (contestID) {
+      params.contest_id = contestID
+    }
+    return ajax('contest/proctoring_monitor', 'get', { params })
+  },
   getContestAccess (contestID) {
     return ajax('contest/access', 'get', {
       params: {

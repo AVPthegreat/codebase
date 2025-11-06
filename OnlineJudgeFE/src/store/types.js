@@ -28,5 +28,8 @@ export default keyMirror({
   // Contest lock/flow
   'CONTEST_SET_STARTED': null,
   'CONTEST_INCREMENT_FULLSCREEN_EXIT': null,
-  'CONTEST_RESET_LOCK': null
+  'CONTEST_RESET_LOCK': null,
+  'CONTEST_SAVE_SUBMISSION': null,
+  'CONTEST_UPDATE_PROBLEM_STATS': null,
+  'CONTEST_RESTORE_STATE': null
 })

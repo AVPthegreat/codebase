@@ -2,6 +2,9 @@
   <div>
     <Panel>
       <div slot="title">{{$t('m.Problems_List')}}</div>
+      <div slot="extra" v-if="contestStarted">
+        <Button type="primary" size="small" @click="viewOverview">View Overview</Button>
+      </div>
       <Table v-if="contestRuleType == 'ACM' || OIContestRealTimePermission"
              :columns="ACMTableColumns"
              :data="problems"
@@ -62,6 +65,11 @@
     },
     mounted () {
       this.getContestProblems()
+      // Ensure scrolling works in fullscreen during contest
+      if (this.$store.state.contest && this.$store.state.contest.started) {
+        document.documentElement.style.overflow = 'auto'
+        document.body.style.overflow = 'auto'
+      }
     },
     methods: {
       getContestProblems () {
@@ -83,13 +91,24 @@
             problemID: row._id
           }
         })
+      },
+      viewOverview () {
+        this.$router.push({
+          name: 'contest-details',
+          params: {
+            contestID: this.$route.params.contestID
+          }
+        })
       }
     },
     computed: {
       ...mapState({
         problems: state => state.contest.contestProblems
       }),
-      ...mapGetters(['isAuthenticated', 'contestRuleType', 'OIContestRealTimePermission'])
+      ...mapGetters(['isAuthenticated', 'contestRuleType', 'OIContestRealTimePermission']),
+      contestStarted () {
+        return this.$store.state.contest && this.$store.state.contest.started
+      }
     }
   }
 </script>

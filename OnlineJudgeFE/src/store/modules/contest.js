@@ -2,6 +2,56 @@ import moment from 'moment'
 import types from '../types'
 import api from '@oj/api'
 import { CONTEST_STATUS, USER_TYPE, CONTEST_TYPE } from '@/utils/constants'
+import storage from '@/utils/storage'
+
+// Helper functions for localStorage persistence
+const CONTEST_STATE_KEY = 'contest_state'
+
+const saveContestStateToLocal = (contestID, state) => {
+  const key = `${CONTEST_STATE_KEY}_${contestID}`
+  const contestState = {
+    started: state.started,
+    fullscreenExitCount: state.fullscreenExitCount,
+    attempt: state.attempt,
+    startTime: state.started ? new Date().toISOString() : null,
+    submissions: storage.get(`${key}_submissions`) || [],
+    problemStats: storage.get(`${key}_problem_stats`) || {}
+  }
+  storage.set(key, contestState)
+}
+
+const loadContestStateFromLocal = (contestID) => {
+  const key = `${CONTEST_STATE_KEY}_${contestID}`
+  return storage.get(key) || null
+}
+
+const clearContestStateFromLocal = (contestID) => {
+  const key = `${CONTEST_STATE_KEY}_${contestID}`
+  storage.remove(key)
+  storage.remove(`${key}_submissions`)
+  storage.remove(`${key}_problem_stats`)
+}
+
+const saveSubmissionToLocal = (contestID, submissionData) => {
+  const key = `${CONTEST_STATE_KEY}_${contestID}_submissions`
+  const submissions = storage.get(key) || []
+  submissions.push({
+    ...submissionData,
+    timestamp: new Date().toISOString()
+  })
+  storage.set(key, submissions)
+}
+
+const updateProblemStatsLocal = (contestID, problemID, stats) => {
+  const key = `${CONTEST_STATE_KEY}_${contestID}_problem_stats`
+  const allStats = storage.get(key) || {}
+  allStats[problemID] = {
+    ...allStats[problemID],
+    ...stats,
+    lastUpdated: new Date().toISOString()
+  }
+  storage.set(key, allStats)
+}
 
 const state = {
   now: moment(),
@@ -11,6 +61,7 @@ const state = {
   // Contest lock state
   started: false,
   fullscreenExitCount: 0,
+  attempt: null,
   contest: {
     created_by: {},
     contest_type: CONTEST_TYPE.PUBLIC
@@ -140,13 +191,46 @@ const mutations = {
     if (payload.resetCount) {
       state.fullscreenExitCount = 0
     }
+    // Save to localStorage
+    if (payload.contestID) {
+      saveContestStateToLocal(payload.contestID, state)
+    }
   },
-  [types.CONTEST_INCREMENT_FULLSCREEN_EXIT] (state) {
+  [types.CONTEST_INCREMENT_FULLSCREEN_EXIT] (state, payload) {
     state.fullscreenExitCount += 1
+    // Save to localStorage
+    if (payload && payload.contestID) {
+      saveContestStateToLocal(payload.contestID, state)
+    }
   },
-  [types.CONTEST_RESET_LOCK] (state) {
+  [types.CONTEST_RESET_LOCK] (state, payload) {
     state.started = false
     state.fullscreenExitCount = 0
+    state.attempt = null
+    // Clear localStorage
+    if (payload && payload.contestID) {
+      clearContestStateFromLocal(payload.contestID)
+    }
+  },
+  [types.CONTEST_SAVE_SUBMISSION] (state, payload) {
+    // Save submission to localStorage
+    if (payload.contestID && payload.submissionData) {
+      saveSubmissionToLocal(payload.contestID, payload.submissionData)
+    }
+  },
+  [types.CONTEST_UPDATE_PROBLEM_STATS] (state, payload) {
+    // Update problem stats in localStorage
+    if (payload.contestID && payload.problemID && payload.stats) {
+      updateProblemStatsLocal(payload.contestID, payload.problemID, payload.stats)
+    }
+  },
+  [types.CONTEST_RESTORE_STATE] (state, payload) {
+    // Restore contest state from localStorage
+    if (payload.contestState) {
+      state.started = payload.contestState.started || false
+      state.fullscreenExitCount = payload.contestState.fullscreenExitCount || 0
+      state.attempt = payload.contestState.attempt || null
+    }
   }
 }
 
@@ -191,6 +275,91 @@ const actions = {
         resolve(res)
       }).catch()
     })
+  },
+  loadContestOverview ({commit, state, rootState}) {
+    const contestID = rootState.route.params.contestID
+    return new Promise((resolve, reject) => {
+      api.getContestUserOverview(contestID).then(res => {
+        const attempt = res.data.data
+        if (attempt) {
+          commit(types.CONTEST_SET_STARTED, { started: true, contestID })
+          state.fullscreenExitCount = attempt.fullscreen_exit_count || 0
+          state.attempt = attempt
+        }
+        resolve(res)
+      }).catch(err => reject(err))
+    })
+  },
+  restoreContestState ({commit, rootState}) {
+    // Restore contest state from localStorage on page load
+    const contestID = rootState.route.params.contestID
+    if (contestID) {
+      const savedState = loadContestStateFromLocal(contestID)
+      if (savedState && savedState.started) {
+        commit(types.CONTEST_RESTORE_STATE, { contestState: savedState })
+        // Re-enable fullscreen if contest was active
+        if (savedState.started) {
+          const el = document.documentElement
+          if (el.requestFullscreen) {
+            el.requestFullscreen().catch(() => {})
+          } else if (el.webkitRequestFullscreen) {
+            el.webkitRequestFullscreen()
+          } else if (el.mozRequestFullScreen) {
+            el.mozRequestFullScreen()
+          } else if (el.msRequestFullscreen) {
+            el.msRequestFullscreen()
+          }
+          // Ensure scrolling
+          document.documentElement.style.overflow = 'auto'
+          document.body.style.overflow = 'auto'
+        }
+      }
+    }
+  },
+  saveSubmissionLocal ({commit}, payload) {
+    // Save submission to localStorage
+    commit(types.CONTEST_SAVE_SUBMISSION, payload)
+  },
+  updateProblemStatsLocal ({commit}, payload) {
+    // Update problem stats in localStorage
+    commit(types.CONTEST_UPDATE_PROBLEM_STATS, payload)
+  },
+  async submitContestFromLocal ({state, rootState}, contestID) {
+    // Submit all localStorage data to backend
+    const key = `${CONTEST_STATE_KEY}_${contestID}`
+    const contestState = storage.get(key)
+    const submissions = storage.get(`${key}_submissions`) || []
+    const problemStats = storage.get(`${key}_problem_stats`) || {}
+    
+    if (!contestState || !contestState.started) {
+      throw new Error('No active contest state found')
+    }
+
+    // Prepare data for submission
+    const submissionData = {
+      contest_id: contestID,
+      fullscreen_exit_count: state.fullscreenExitCount,
+      submissions: submissions,
+      problem_stats: Object.keys(problemStats).map(problemID => ({
+        problem_id: problemID,
+        ...problemStats[problemID]
+      })),
+      start_time: contestState.startTime,
+      end_time: new Date().toISOString()
+    }
+
+    try {
+      // Call API to submit contest with all data
+      if (contestState.attempt && contestState.attempt.id) {
+        await api.contestStop(contestState.attempt.id, submissionData)
+      }
+      // Clear localStorage after successful submission
+      clearContestStateFromLocal(contestID)
+      return submissionData
+    } catch (error) {
+      console.error('Failed to submit contest data:', error)
+      throw error
+    }
   }
 }
 

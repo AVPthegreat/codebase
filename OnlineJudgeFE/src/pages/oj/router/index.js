@@ -23,6 +23,26 @@ const router = new VueRouter({
 // 全局身份确认
 router.beforeEach((to, from, next) => {
   Vue.prototype.$Loading.start()
+  // Contest lock: restrict navigation while a contest is started
+  const locked = store.state && store.state.contest && store.state.contest.started
+  if (locked) {
+    const toPath = to.path || ''
+    // Allow navigating to contest-details to view overview
+    if (to.name === 'contest-details') {
+      return next()
+    }
+    // Block navigating to global submission pages
+    if (to.name === 'submission-list' || to.name === 'submission-details' || toPath.startsWith('/status')) {
+      Vue.prototype.$Message && Vue.prototype.$Message.warning('During the contest, open Submissions from the problem page only.')
+      return next(false)
+    }
+    // Block leaving contest area unless going to the same contest subtree
+    const inContest = toPath.startsWith('/contest/')
+    if (!inContest) {
+      Vue.prototype.$Message && Vue.prototype.$Message.warning('Contest in progress. Navigation is limited.')
+      return next(false)
+    }
+  }
   if (to.matched.some(record => record.meta.requiresAuth)) {
     if (!storage.get(STORAGE_KEY.AUTHED)) {
       Vue.prototype.$error('Please login first')

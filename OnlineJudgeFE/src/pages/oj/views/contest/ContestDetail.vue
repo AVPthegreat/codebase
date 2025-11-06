@@ -13,27 +13,28 @@
               <div slot="title">
                 {{contest.title}}
               </div>
-              <div slot="extra">
+              <div slot="extra" class="countdown-actions">
                 <Tag type="dot" :color="countdownColor">
                   <span id="countdown">{{countdown}}</span>
                 </Tag>
+                <Button v-if="!contestStarted" class="start-btn" @click="handleStartContest">Start Contest</Button>
+                <Button v-else type="error" ghost class="stop-btn" @click="handleStopContest">Stop</Button>
               </div>
-              <Alert v-if="contestStarted" type="success" show-icon style="margin-bottom: 10px;">
-                Proctoring enabled: Fullscreen is required during the contest.
-              </Alert>
-              <div v-html="contest.description" class="markdown-body"></div>
-              <div v-if="passwordFormVisible" class="contest-password">
+              <div v-if="contestStarted" class="proctoring-banner"><Icon type="alert-circled" /> Proctoring active. Fullscreen required. Exits: {{ fullscreenExitCount }}/5</div>
+              <div v-if="!contestStarted" v-html="contest.description" class="markdown-body"></div>
+              <div v-else>
+                <Table :columns="overviewColumns" :data="overviewRows" :loading="overviewLoading" border size="small"></Table>
+              </div>
+              <div v-if="passwordFormVisible && !contestStarted" class="contest-password">
                 <Input v-model="contestPassword" type="password"
                        placeholder="contest password" class="contest-password-input"
                        @on-enter="checkPassword"/>
                 <Button type="info" @click="checkPassword">Enter</Button>
               </div>
-              <div style="margin-top: 12px;" v-if="!contestStarted">
-                <Button type="primary" icon="play" @click="handleStartContest">Start Contest</Button>
-              </div>
+              
             </Panel>
-            <Table :columns="columns" :data="contest_table" disabled-hover style="margin-bottom: 12px;"></Table>
-            <Alert v-if="contestStarted && !isFullscreen" type="warning" show-icon>
+            <Table v-if="!contestStarted" :columns="columns" :data="contest_table" disabled-hover style="margin-bottom: 12px;"></Table>
+            <Alert v-if="contestStarted && !isFullscreen" type="warning" show-icon class="proctoring-warning">
               You exited full screen during contest. Please return to full screen. Warning {{ fullscreenExitCount }}/5
             </Alert>
           </div>
@@ -94,12 +95,36 @@
               return h('span', data.row.created_by.username)
             }
           }
-        ]
+        ],
+        overviewColumns: [
+          { title: 'ID', key: 'problem_id', width: 80, align: 'center' },
+          { title: 'Problem', key: 'problem_title' },
+          { title: 'Status', key: 'best_result', align: 'center', render: (h, params) => {
+              const r = params.row.best_result
+              let text = 'NA'; let color = 'default'
+              if (params.row.attempts > 0) {
+                if (r === 0) { text = 'AC'; color = 'success' }
+                else if (r === 8 || (params.row.passed_cases > 0 && params.row.passed_cases < params.row.total_cases)) { text = 'PC'; color = 'warning' }
+                else { text = 'WA'; color = 'error' }
+              }
+              return h('Tag', { props: { color } }, text)
+            }
+          },
+          { title: 'Attempts', key: 'attempts', width: 100, align: 'center' },
+          { title: 'Score', key: 'score', width: 100, align: 'center' }
+        ],
+        overviewRows: [],
+        overviewLoading: false,
+        attemptId: null
       }
     },
     mounted () {
       this.contestID = this.$route.params.contestID
       this.route_name = this.$route.name
+      
+      // Restore contest state from localStorage if exists
+      this.$store.dispatch('restoreContestState')
+      
       this.$store.dispatch('getContest').then(res => {
         this.changeDomTitle({title: res.data.data.title})
         let data = res.data.data
@@ -110,6 +135,7 @@
           }, 1000)
         }
       })
+      this.loadOverview()
     },
     beforeDestroy () {
       clearInterval(this.timer)
@@ -126,7 +152,16 @@
           title: 'Start Contest',
           content: 'You will not be able to access other parts until you submit the contest. Are you sure to start?',
           onOk: () => {
-            this.$store.commit(types.CONTEST_SET_STARTED, {started: true, resetCount: true})
+            // Immediately set started state for instant UI update
+            this.$store.commit(types.CONTEST_SET_STARTED, {started: true, resetCount: true, contestID: this.contestID})
+            api.contestStart(this.contestID).then(res => {
+              const attempt = res.data.data
+              this.attemptId = attempt && attempt.id
+              this.$store.state.contest.attempt = attempt
+              // Save attempt to localStorage
+              this.$store.commit(types.CONTEST_SET_STARTED, {started: true, contestID: this.contestID})
+              this.loadOverview()
+            }).catch(() => {})
             const el = document.documentElement
             if (el.requestFullscreen) {
               el.requestFullscreen()
@@ -137,6 +172,9 @@
             } else if (el.msRequestFullscreen) {
               el.msRequestFullscreen()
             }
+            // Allow scrolling in fullscreen mode
+            document.documentElement.style.overflow = 'auto'
+            document.body.style.overflow = 'auto'
             this.$Modal.success({ title: 'All the best!', content: 'Contest started.' })
             this.$router.push({ name: 'contest-problem-list', params: { contestID: this.contestID } })
             document.addEventListener('fullscreenchange', this.onFullscreenChange)
@@ -146,16 +184,126 @@
           }
         })
       },
+      handleStopContest () {
+        const id = this.attemptId || (this.$store.state.contest.attempt && this.$store.state.contest.attempt.id)
+        if (!id) {
+          this.$Message.warning('No active contest attempt found')
+          return
+        }
+        
+        this.$Modal.confirm({
+          title: 'Submit Contest',
+          content: 'This will submit all your work and end the contest. Are you sure?',
+          onOk: () => {
+            // Submit all localStorage data to backend
+            this.$store.dispatch('submitContestFromLocal', this.contestID).then(() => {
+              this.$store.commit(types.CONTEST_RESET_LOCK, { contestID: this.contestID })
+              document.documentElement.style.overflow = ''
+              document.body.style.overflow = ''
+              this.$Message.success('Contest submitted successfully')
+              this.loadOverview()
+            }).catch(() => {
+              this.$Message.error('Failed to submit contest')
+            })
+          }
+        })
+      },
       onFullscreenChange () {
         const fs = document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement
+        // Ensure scroll is always enabled
+        document.documentElement.style.overflow = 'auto'
+        document.body.style.overflow = 'auto'
+        
         if (!fs && this.contestStarted) {
-          this.$store.commit(types.CONTEST_INCREMENT_FULLSCREEN_EXIT)
-          if (this.fullscreenExitCount >= 5) {
-            this.$Modal.warning({ title: 'Contest submitted', content: 'You exited full screen 5 times. Submitting contest.' })
-            this.$store.commit(types.CONTEST_RESET_LOCK)
-            this.$router.push({ name: 'contest-details', params: { contestID: this.contestID } })
-          }
+          // Increment violation count
+          this.$store.commit(types.CONTEST_INCREMENT_FULLSCREEN_EXIT, { contestID: this.contestID })
+          
+          // Wait for state to update, then process
+          this.$nextTick(() => {
+            const currentCount = this.fullscreenExitCount
+            const id = this.attemptId || (this.$store.state.contest.attempt && this.$store.state.contest.attempt.id)
+            
+            console.log('Fullscreen exit detected. New count:', currentCount)
+            
+            // Save to backend immediately for admin monitoring
+            if (id) {
+              api.contestProctor(id, { 
+                action: 'fullscreen_exit',
+                violation_count: currentCount,
+                timestamp: new Date().toISOString()
+              }).then((res) => {
+                console.log('Fullscreen exit recorded to backend:', res.data)
+              }).catch((err) => {
+                console.error('Failed to record fullscreen exit:', err)
+              })
+            } else {
+              console.warn('No attempt ID found, violation not saved to backend')
+            }
+            
+            // Show warning and prompt to return to fullscreen
+            if (currentCount >= 5) {
+              this.$Modal.error({
+                title: 'Contest Auto-Submitted',
+                content: `You have exited fullscreen ${currentCount} times. This is considered a violation. Your contest has been automatically submitted.`,
+                onOk: () => {
+                  // Auto-submit contest
+                  this.$store.dispatch('submitContestFromLocal', this.contestID).then(() => {
+                    this.$store.commit(types.CONTEST_RESET_LOCK, { contestID: this.contestID })
+                    document.documentElement.style.overflow = ''
+                    document.body.style.overflow = ''
+                    this.$router.push({ name: 'contest-details', params: { contestID: this.contestID } })
+                  }).catch(() => {
+                    this.$Message.error('Failed to auto-submit contest')
+                  })
+                }
+              })
+            } else {
+              // Show warning and re-prompt for fullscreen
+              this.$Modal.warning({
+                title: '⚠️ Fullscreen Exit Detected',
+                content: `<div style="font-size: 14px; line-height: 1.6;">
+                  <p><strong style="color: #ff6b6b;">Warning: Illegal Activity Detected!</strong></p>
+                  <p>You have exited fullscreen mode.</p>
+                  <p><strong>Violation Count: ${currentCount}/5</strong></p>
+                  <p style="color: #666;">This action has been recorded and reported to the admin panel.</p>
+                  <p style="color: #ff6b6b; font-weight: bold;">After 5 violations, your contest will be automatically submitted.</p>
+                  <p style="margin-top: 10px;">Please click OK to return to fullscreen mode.</p>
+                </div>`,
+                okText: 'Return to Fullscreen',
+                onOk: () => {
+                  // Re-enable fullscreen
+                  const el = document.documentElement
+                  if (el.requestFullscreen) {
+                    el.requestFullscreen().catch(() => {
+                      this.$Message.error('Failed to enter fullscreen. Please press F11 or use browser fullscreen.')
+                    })
+                  } else if (el.webkitRequestFullscreen) {
+                    el.webkitRequestFullscreen()
+                  } else if (el.mozRequestFullScreen) {
+                    el.mozRequestFullScreen()
+                  } else if (el.msRequestFullscreen) {
+                    el.msRequestFullscreen()
+                  }
+                  document.documentElement.style.overflow = 'auto'
+                  document.body.style.overflow = 'auto'
+                }
+              })
+            }
+          })
         }
+      },
+      loadOverview () {
+        this.overviewLoading = true
+        this.$store.dispatch('loadContestOverview').then(res => {
+          const attempt = res.data.data
+          if (attempt) {
+            this.attemptId = attempt.id
+            this.overviewRows = attempt.problem_stats || []
+          } else {
+            this.overviewRows = []
+          }
+          this.overviewLoading = false
+        }).catch(() => { this.overviewLoading = false })
       },
       checkPassword () {
         if (this.contestPassword === '') {
@@ -206,6 +354,18 @@
 </script>
 
 <style scoped lang="less">
+  .countdown-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .start-btn {
+    background: #39ff14 !important;
+    color: #000 !important;
+    border: 1px solid #2fdc0b !important;
+    box-shadow: 0 0 8px #39ff14;
+  }
+  .stop-btn { margin-left: 6px; }
   pre {
     display: inline-block;
   }
@@ -235,4 +395,16 @@
       }
     }
   }
+  .proctoring-banner {
+    position: sticky;
+    top: 70px;
+    z-index: 10000;
+    background: rgba(255, 243, 205, 0.95);
+    color: #8a6d3b;
+    border: 1px solid #faebcc;
+    padding: 8px 12px;
+    border-radius: 4px;
+    margin-bottom: 8px;
+  }
+  .proctoring-warning { z-index: 10001; }
 </style>

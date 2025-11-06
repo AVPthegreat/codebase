@@ -13,7 +13,8 @@ from account.models import AdminType
 from account.decorators import login_required, check_contest_permission, check_contest_password
 
 from utils.constants import ContestRuleType, ContestStatus
-from ..models import ContestAnnouncement, Contest, OIContestRank, ACMContestRank
+from ..models import ContestAnnouncement, Contest, OIContestRank, ACMContestRank, ContestAttempt, ContestAttemptProblemStat
+from ..serializers import ContestAttemptSerializer
 from ..serializers import ContestAnnouncementSerializer
 from ..serializers import ContestSerializer, ContestPasswordVerifySerializer
 from ..serializers import OIContestRankSerializer, ACMContestRankSerializer
@@ -190,3 +191,213 @@ class ContestRankAPI(APIView):
         page_qs = self.paginate_data(request, qs)
         page_qs["results"] = serializer(page_qs["results"], many=True, is_contest_admin=is_contest_admin).data
         return self.success(page_qs)
+
+
+class ContestStartAPI(APIView):
+    @login_required
+    def post(self, request):
+        contest_id = request.data.get('contest_id')
+        if not contest_id:
+            return self.error('contest_id required')
+        try:
+            contest = Contest.objects.get(id=contest_id, visible=True)
+        except Contest.DoesNotExist:
+            return self.error('Contest not found')
+        attempt_no = 1
+        existing = ContestAttempt.objects.filter(user=request.user, contest=contest).order_by('-attempt_no').first()
+        if existing:
+            attempt_no = existing.attempt_no + 1 if existing.started and existing.finished_at else existing.attempt_no
+        attempt, _ = ContestAttempt.objects.get_or_create(user=request.user, contest=contest, attempt_no=attempt_no)
+        if not attempt.started:
+            attempt.started = True
+            attempt.started_at = now()
+            attempt.save(update_fields=['started', 'started_at'])
+        # preload problem stats rows
+        problems = Problem.objects.filter(contest=contest, visible=True).order_by('_id')
+        for p in problems:
+            ContestAttemptProblemStat.objects.get_or_create(attempt=attempt, problem=p)
+        return self.success(ContestAttemptSerializer(attempt).data)
+
+
+class ContestStopAPI(APIView):
+    @login_required
+    def post(self, request):
+        attempt_id = request.data.get('attempt_id')
+        if not attempt_id:
+            return self.error('attempt_id required')
+        try:
+            attempt = ContestAttempt.objects.select_related('contest').get(id=attempt_id, user=request.user)
+        except ContestAttempt.DoesNotExist:
+            return self.error('Attempt not found')
+        if not attempt.finished_at:
+            attempt.finished_at = now()
+            attempt.save(update_fields=['finished_at'])
+        return self.success(ContestAttemptSerializer(attempt).data)
+
+
+class ContestProctorAPI(APIView):
+    @login_required
+    def post(self, request):
+        attempt_id = request.data.get('attempt_id')
+        if not attempt_id:
+            return self.error('attempt_id required')
+        try:
+            attempt = ContestAttempt.objects.get(id=attempt_id, user=request.user)
+        except ContestAttempt.DoesNotExist:
+            return self.error('Attempt not found')
+        
+        action = request.data.get('action')
+        violation_count = request.data.get('violation_count', 0)
+        timestamp = request.data.get('timestamp', datetime2str(now()))
+        
+        if action == 'fullscreen_exit':
+            # Increment count
+            attempt.fullscreen_exit_count += 1
+            
+            # Record detailed violation with timestamp for admin monitoring
+            violations = attempt.violations if attempt.violations else []
+            violations.append({
+                'type': 'fullscreen_exit',
+                'timestamp': timestamp,
+                'violation_number': attempt.fullscreen_exit_count,
+                'total_violations': violation_count,
+                'user_id': request.user.id,
+                'username': request.user.username,
+                'contest_id': attempt.contest_id,
+                'severity': 'high' if attempt.fullscreen_exit_count >= 3 else 'medium'
+            })
+            attempt.violations = violations
+            attempt.save(update_fields=['fullscreen_exit_count', 'violations'])
+            
+            # Log for admin real-time monitoring
+            import logging
+            logger = logging.getLogger('contest_proctoring')
+            logger.warning(
+                f'PROCTORING VIOLATION - User: {request.user.username} (ID: {request.user.id}) | '
+                f'Contest: {attempt.contest_id} | Action: fullscreen_exit | '
+                f'Count: {attempt.fullscreen_exit_count}/{violation_count} | '
+                f'Timestamp: {timestamp}'
+            )
+        
+        # Handle other violation types
+        violation = request.data.get('violation')
+        if violation:
+            violations = attempt.violations if attempt.violations else []
+            violations.append({
+                'type': violation,
+                'timestamp': timestamp,
+                'user_id': request.user.id,
+                'username': request.user.username
+            })
+            attempt.violations = violations
+            attempt.save(update_fields=['violations'])
+        
+        return self.success({
+            'fullscreen_exit_count': attempt.fullscreen_exit_count,
+            'violations': attempt.violations,
+            'message': f'Violation recorded. Count: {attempt.fullscreen_exit_count}/5'
+        })
+
+
+class ContestUserOverviewAPI(APIView):
+    @login_required
+    def get(self, request):
+        contest_id = request.GET.get('contest_id')
+        if not contest_id:
+            return self.error('contest_id required')
+        try:
+            contest = Contest.objects.get(id=contest_id)
+        except Contest.DoesNotExist:
+            return self.error('Contest not found')
+        attempt = ContestAttempt.objects.filter(user=request.user, contest=contest).order_by('-attempt_no').first()
+        if not attempt:
+            return self.success(None)
+        # aggregate latest submission stats for each problem
+        stats_map = {ps.problem_id: ps for ps in attempt.problem_stats.all()}
+        submissions = Submission.objects.filter(user_id=request.user.id, contest=contest).order_by('create_time')
+        for sub in submissions:
+            ps = stats_map.get(sub.problem_id)
+            if not ps:
+                continue
+            ps.attempts += 1
+            # derive passed cases/total cases
+            testcase_list = []
+            if sub.info and isinstance(sub.info.get('data'), list):
+                testcase_list = sub.info['data']
+            total_cases = len(testcase_list)
+            passed_cases = sum(1 for tc in testcase_list if tc.get('result') == 0)
+            # choose best result & score
+            ps.total_cases = max(ps.total_cases, total_cases)
+            ps.passed_cases = max(ps.passed_cases, passed_cases)
+            # status result mapping: prefer AC (0), else PARTIALLY_ACCEPTED (8), else keep previous
+            if sub.result == 0:
+                ps.best_result = 0
+            elif passed_cases > 0 and passed_cases < total_cases:
+                if ps.best_result != 0:  # don't overwrite AC
+                    ps.best_result = 8
+            else:
+                if ps.best_result not in (0, 8):
+                    ps.best_result = sub.result
+            # score compute
+            score = 0
+            if total_cases > 0:
+                score = int(100 * passed_cases / total_cases)
+            ps.score = max(ps.score, score)
+            ps.save(update_fields=['attempts', 'best_result', 'passed_cases', 'total_cases', 'score'])
+        return self.success(ContestAttemptSerializer(attempt).data)
+
+
+class ContestUserAttemptsListAPI(APIView):
+    @login_required
+    def get(self, request):
+        attempts = ContestAttempt.objects.filter(user=request.user).select_related('contest').order_by('-started_at')[:200]
+        return self.success(ContestAttemptSerializer(attempts, many=True).data)
+
+
+class ContestProctoringMonitorAPI(APIView):
+    """
+    Admin endpoint to monitor proctoring violations in real-time
+    Returns all active contest attempts with violation details
+    """
+    @login_required
+    def get(self, request):
+        # Check if user is admin
+        if not request.user.is_authenticated or request.user.admin_type not in ['Super Admin', 'Admin']:
+            return self.error('Permission denied. Admin access required.')
+        
+        contest_id = request.GET.get('contest_id')
+        
+        # Get all active attempts (started but not finished)
+        query = ContestAttempt.objects.select_related('user', 'contest').filter(started=True)
+        
+        if contest_id:
+            query = query.filter(contest_id=contest_id)
+        
+        # Order by most recent violations first
+        attempts = query.order_by('-fullscreen_exit_count', '-started_at')[:100]
+        
+        violation_data = []
+        for attempt in attempts:
+            violation_data.append({
+                'attempt_id': attempt.id,
+                'user_id': attempt.user.id,
+                'username': attempt.user.username,
+                'real_name': attempt.user.real_name if hasattr(attempt.user, 'real_name') else '',
+                'contest_id': attempt.contest.id,
+                'contest_title': attempt.contest.title,
+                'started_at': attempt.started_at,
+                'finished_at': attempt.finished_at,
+                'is_active': attempt.started and not attempt.finished_at,
+                'fullscreen_exit_count': attempt.fullscreen_exit_count,
+                'violations': attempt.violations if attempt.violations else [],
+                'total_violations': len(attempt.violations) if attempt.violations else 0,
+                'severity': 'critical' if attempt.fullscreen_exit_count >= 5 else 'high' if attempt.fullscreen_exit_count >= 3 else 'medium' if attempt.fullscreen_exit_count > 0 else 'low',
+                'status': 'auto_submitted' if attempt.fullscreen_exit_count >= 5 else 'active' if attempt.started and not attempt.finished_at else 'completed'
+            })
+        
+        return self.success({
+            'total_monitored': len(violation_data),
+            'active_attempts': sum(1 for v in violation_data if v['is_active']),
+            'high_risk_users': sum(1 for v in violation_data if v['fullscreen_exit_count'] >= 3),
+            'violations': violation_data
+        })

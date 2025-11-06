@@ -6,6 +6,37 @@ from utils.models import JSONField
 from utils.constants import ContestStatus, ContestType
 from account.models import User
 from utils.models import RichTextField
+from problem.models import Problem
+
+
+class ContestAttempt(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    contest = models.ForeignKey('Contest', on_delete=models.CASCADE)
+    attempt_no = models.IntegerField(default=1)
+    started = models.BooleanField(default=False)
+    started_at = models.DateTimeField(null=True)
+    finished_at = models.DateTimeField(null=True)
+    fullscreen_exit_count = models.IntegerField(default=0)
+    violations = JSONField(default=list)
+
+    class Meta:
+        db_table = 'contest_attempt'
+        unique_together = (('user', 'contest', 'attempt_no'),)
+        ordering = ('-started_at',)
+
+
+class ContestAttemptProblemStat(models.Model):
+    attempt = models.ForeignKey(ContestAttempt, on_delete=models.CASCADE, related_name='problem_stats')
+    problem = models.ForeignKey(Problem, on_delete=models.CASCADE)
+    attempts = models.IntegerField(default=0)
+    best_result = models.IntegerField(default=0)
+    passed_cases = models.IntegerField(default=0)
+    total_cases = models.IntegerField(default=0)
+    score = models.IntegerField(default=0)
+
+    class Meta:
+        db_table = 'contest_attempt_problem_stat'
+        unique_together = (('attempt', 'problem'),)
 
 
 class Contest(models.Model):

@@ -1,6 +1,7 @@
 from utils.api import UsernameSerializer, serializers
 
 from .models import Contest, ContestAnnouncement, ContestRuleType
+from .models import ContestAttempt, ContestAttemptProblemStat
 from .models import ACMContestRank, OIContestRank
 
 
@@ -108,3 +109,21 @@ class ACMContesHelperSerializer(serializers.Serializer):
     problem_id = serializers.CharField()
     rank_id = serializers.IntegerField()
     checked = serializers.BooleanField()
+
+
+class ContestAttemptProblemStatSerializer(serializers.ModelSerializer):
+    problem_id = serializers.IntegerField(source='problem.id', read_only=True)
+    problem_title = serializers.CharField(source='problem.title', read_only=True)
+
+    class Meta:
+        model = ContestAttemptProblemStat
+        fields = ['problem_id', 'problem_title', 'attempts', 'best_result', 'passed_cases', 'total_cases', 'score']
+
+
+class ContestAttemptSerializer(serializers.ModelSerializer):
+    problem_stats = ContestAttemptProblemStatSerializer(many=True, read_only=True)
+    contest_title = serializers.CharField(source='contest.title', read_only=True)
+
+    class Meta:
+        model = ContestAttempt
+        fields = ['id', 'contest_id', 'contest_title', 'attempt_no', 'started', 'started_at', 'finished_at', 'fullscreen_exit_count', 'violations', 'problem_stats']

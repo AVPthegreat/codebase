@@ -84,6 +84,23 @@
     box-sizing: border-box;
   }
 
+  // Ensure scrolling works in fullscreen mode
+  html:fullscreen,
+  html:-webkit-full-screen,
+  html:-moz-full-screen,
+  html:-ms-fullscreen {
+    overflow: auto !important;
+    height: 100%;
+  }
+
+  body:fullscreen,
+  body:-webkit-full-screen,
+  body:-moz-full-screen,
+  body:-ms-fullscreen {
+    overflow: auto !important;
+    height: 100%;
+  }
+
   a {
     text-decoration: none;
     background-color: transparent;

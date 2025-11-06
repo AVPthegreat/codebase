@@ -14,7 +14,7 @@
         <Icon type="trophy"></Icon>
         {{$t('m.Contests')}}
       </Menu-item>
-      <Menu-item name="/status">
+      <Menu-item name="/status" :disabled="contestLocked">
         <Icon type="ios-pulse-strong"></Icon>
         {{$t('m.NavStatus')}}
       </Menu-item>
@@ -130,12 +130,15 @@
     methods: {
       ...mapActions(['getProfile', 'changeModalStatus']),
       handleRoute (route) {
-        // Disable most navigation during an active contest; allow limited exceptions
+        // Block status and most navigation during active contest
         if (this.$store.state.contest && this.$store.state.contest.started) {
-          const allowed = ['/', '/problem', '/status']
-          // Discussions and other routes blocked during contest
-          if (!allowed.includes(route)) {
-            this.$Message.warning('Contest in progress. Navigation is disabled.')
+          if (route && route.indexOf('/status') === 0) {
+            this.$Message.warning('During the contest, open Submissions from the problem page only.')
+            return
+          }
+          // Allow only staying within contest subtree or homepage
+          if (route && !route.startsWith('/contest/')) {
+            this.$Message.warning('Contest in progress. Navigation is limited.')
             return
           }
         }

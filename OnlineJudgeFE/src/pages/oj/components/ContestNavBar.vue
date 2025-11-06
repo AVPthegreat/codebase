@@ -114,11 +114,12 @@ export default {
   },
   methods: {
     handleMenuSelect (routeName) {
-      // Restrict during contest lock: allow only Problems list and Submissions
+      // Allow navigation to Overview (contest-details) at any time to see stats
+      // Restrict other pages during contest lock
       if (this.$store.state.contest && this.$store.state.contest.started) {
-        const allowed = ['contest-problem-list', 'contest-submission-list']
+        const allowed = ['contest-details', 'contest-problem-list', 'contest-submission-list']
         if (!allowed.includes(routeName)) {
-          this.$Message.warning('Only Problems and Submissions are available during contest')
+          this.$Message.warning('Only Overview, Problems, and Submissions are available during contest')
           return
         }
       }

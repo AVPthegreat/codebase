@@ -13,8 +13,9 @@ from utils.api import APIView, validate_serializer
 from utils.cache import cache
 from utils.constants import CacheKey
 from utils.shortcuts import rand_str
+from utils.mail import send_contest_result_email
 from utils.tasks import delete_files
-from ..models import Contest, ContestAnnouncement, ACMContestRank
+from ..models import Contest, ContestAnnouncement, ACMContestRank, ContestAttempt, ContestAttemptProblemStat
 from ..serializers import (ContestAnnouncementSerializer, ContestAdminSerializer,
                            CreateConetestSeriaizer, CreateContestAnnouncementSerializer,
                            EditConetestSeriaizer, EditContestAnnouncementSerializer,
@@ -239,3 +240,37 @@ class DownloadContestSubmissions(APIView):
         resp["Content-Type"] = "application/zip"
         resp["Content-Disposition"] = f"attachment;filename={os.path.basename(zip_path)}"
         return resp
+
+
+class SendContestResultEmailAPI(APIView):
+    @check_contest_permission(check_type="edit")
+    def post(self, request):
+        contest = self.contest
+        # Find participants via ContestAttempt
+        attempts = ContestAttempt.objects.filter(contest=contest, started=True).select_related("user")
+        if not attempts.exists():
+            return self.success("No attempts found for this contest")
+
+        # Build per-user problem stats and send emails
+        sent = 0
+        for attempt in attempts:
+            # get stats
+            stats = ContestAttemptProblemStat.objects.filter(attempt=attempt)
+            problem_stats = [
+                {
+                    "problem_id": s.problem_id,
+                    "attempts": s.attempts,
+                    "best_result": s.best_result,
+                    "passed_cases": s.passed_cases,
+                    "total_cases": s.total_cases,
+                    "score": s.score,
+                }
+                for s in stats
+            ]
+            try:
+                send_contest_result_email(attempt.user, contest, attempt, problem_stats)
+                sent += 1
+            except Exception:
+                # continue sending others even if one fails
+                pass
+        return self.success({"sent": sent, "total": attempts.count()})

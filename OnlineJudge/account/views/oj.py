@@ -22,7 +22,7 @@ from ..models import User, UserProfile, AdminType
 from ..serializers import (ApplyResetPasswordSerializer, ResetPasswordSerializer,
                            UserChangePasswordSerializer, UserLoginSerializer,
                            UserRegisterSerializer, UsernameOrEmailCheckSerializer,
-                           RankInfoSerializer, UserChangeEmailSerializer, SSOSerializer)
+                           RankInfoSerializer, UserChangeEmailSerializer, SSOSerializer, EmailVerifySerializer)
 from ..serializers import (TwoFactorAuthCodeSerializer, UserProfileSerializer,
                            EditUserProfileSerializer, ImageUploadForm)
 from ..tasks import send_email_async
@@ -229,6 +229,26 @@ class UserRegisterAPI(APIView):
         user.set_password(data["password"])
         user.save()
         UserProfile.objects.create(user=user)
+        # send email verification if smtp configured
+        if user.email and SysOptions.smtp_config:
+            user.email_verify_token = rand_str()
+            from django.utils.timezone import now as dj_now
+            from datetime import timedelta
+            user.email_verify_token_expire_time = dj_now() + timedelta(hours=24)
+            user.save(update_fields=["email_verify_token", "email_verify_token_expire_time"])
+            verify_link = f"{SysOptions.website_base_url}/verify-email/{user.email_verify_token}"
+            render_data = {"username": user.username, "website_name": SysOptions.website_name, "link": verify_link}
+            try:
+                from django.template.loader import render_to_string
+                email_html = render_to_string("verify_email.html", render_data)
+            except Exception:
+                # fallback simple html
+                email_html = f"<p>Hello {user.username}, click <a href='{verify_link}'>here</a> to verify your email.</p>"
+            send_email_async.send(from_name=SysOptions.website_name_shortcut,
+                                  to_email=user.email,
+                                  to_name=user.username,
+                                  subject="Verify your email",
+                                  content=email_html)
         return self.success("Succeeded")
 
 
@@ -308,6 +328,24 @@ class ApplyResetPasswordAPI(APIView):
                               subject="Reset your password",
                               content=email_html)
         return self.success("Succeeded")
+
+
+class VerifyEmailAPI(APIView):
+    @validate_serializer(EmailVerifySerializer)
+    def post(self, request):
+        token = request.data["token"]
+        try:
+            user = User.objects.get(email_verify_token=token)
+        except User.DoesNotExist:
+            return self.error("Invalid token")
+        from django.utils.timezone import now as dj_now
+        if user.email_verify_token_expire_time and user.email_verify_token_expire_time < dj_now():
+            return self.error("Token expired")
+        user.email_verified = True
+        user.email_verify_token = None
+        user.email_verify_token_expire_time = None
+        user.save(update_fields=["email_verified", "email_verify_token", "email_verify_token_expire_time"])
+        return self.success("Email verified")
 
 
 class ResetPasswordAPI(APIView):

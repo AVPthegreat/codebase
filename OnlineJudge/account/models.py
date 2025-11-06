@@ -36,6 +36,10 @@ class User(AbstractBaseUser):
     auth_token = models.TextField(null=True)
     two_factor_auth = models.BooleanField(default=False)
     tfa_token = models.TextField(null=True)
+    # Email verification for authentication
+    email_verified = models.BooleanField(default=False)
+    email_verify_token = models.TextField(null=True)
+    email_verify_token_expire_time = models.DateTimeField(null=True)
     session_keys = JSONField(default=list)
     # open api key
     open_api = models.BooleanField(default=False)

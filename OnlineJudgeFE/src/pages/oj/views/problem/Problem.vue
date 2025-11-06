@@ -123,6 +123,10 @@
 
 
     <div id="right-column">
+      <div v-if="contestStarted && contestID" class="contest-actions">
+        <Button type="primary" long @click="handleViewOverview" style="margin-bottom: 8px;">View Overview</Button>
+        <Button type="error" long @click="handleSubmitContest">Submit Contest</Button>
+      </div>
       <div class="toggle-buttons grid-2x2">
         <Button class="toggle-btn" :type="activePanel==='info' ? 'primary' : 'default'" @click="activePanel='info'">
           <Icon type="information-circled" /> {{$t('m.Information')}}
@@ -302,10 +306,36 @@
     },
     mounted () {
       this.$store.commit(types.CHANGE_CONTEST_ITEM_VISIBLE, {menu: false})
+      // Ensure scrolling works in fullscreen during contest
+      if (this.$store.state.contest && this.$store.state.contest.started) {
+        document.documentElement.style.overflow = 'auto'
+        document.body.style.overflow = 'auto'
+      }
       this.init()
     },
     methods: {
       ...mapActions(['changeDomTitle']),
+      handleViewOverview () {
+        this.$router.push({ name: 'contest-details', params: { contestID: this.contestID } })
+      },
+      handleSubmitContest () {
+        this.$Modal.confirm({
+          title: 'Submit Contest',
+          content: 'Are you sure you want to finish and submit the contest? You will be redirected to the overview page.',
+          onOk: () => {
+            // Submit all localStorage data to backend
+            this.$store.dispatch('submitContestFromLocal', this.contestID).then(() => {
+              this.$store.commit(types.CONTEST_RESET_LOCK, { contestID: this.contestID })
+              document.documentElement.style.overflow = ''
+              document.body.style.overflow = ''
+              this.$Message.success('Contest submitted successfully')
+              this.$router.push({ name: 'contest-details', params: { contestID: this.contestID } })
+            }).catch(() => {
+              this.$Message.error('Failed to submit contest')
+            })
+          }
+        })
+      },
       sendDiscussion () {
         const msg = this.discussionMessage.trim()
         if (!msg) { return }
@@ -435,6 +465,28 @@
               this.submitting = false
               this.submitted = false
               clearTimeout(this.refreshStatus)
+              
+              // Update problem stats in localStorage if in contest
+              if (this.contestID && this.$store.state.contest.started) {
+                const submissionResult = res.data.data
+                const info = submissionResult.info || {}
+                const testcases = info.data || []
+                const passedCases = testcases.filter(tc => tc.result === 0).length
+                const totalCases = testcases.length
+                
+                this.$store.dispatch('updateProblemStatsLocal', {
+                  contestID: this.contestID,
+                  problemID: this.problemID,
+                  stats: {
+                    attempts: 1, // will be incremented in store
+                    result: submissionResult.result,
+                    passed_cases: passedCases,
+                    total_cases: totalCases,
+                    score: totalCases > 0 ? Math.floor((passedCases / totalCases) * 100) : 0
+                  }
+                })
+              }
+              
               this.init()
             } else {
               this.refreshStatus = setTimeout(checkStatus, 2000)
@@ -467,6 +519,22 @@
           this.statusVisible = true
           api.submitCode(data).then(res => {
             this.submissionId = res.data.data && res.data.data.submission_id
+            
+            // Save submission to localStorage if in contest
+            if (this.contestID && this.$store.state.contest.started) {
+              this.$store.dispatch('saveSubmissionLocal', {
+                contestID: this.contestID,
+                submissionData: {
+                  submission_id: this.submissionId,
+                  problem_id: this.problem.id,
+                  problem_title: this.problem.title,
+                  language: this.language,
+                  code: this.code,
+                  result: 9 // pending initially
+                }
+              })
+            }
+            
             // 定时检查状态
             this.submitting = false
             this.submissionExists = true
@@ -585,6 +653,8 @@
   }
 
   .flex-container {
+    display: flex;
+    align-items: flex-start;
     #problem-main {
       flex: auto;
       margin-right: 18px;
@@ -701,6 +771,9 @@
   }
 
   /* Toggle buttons layout: 2x2 grid and spacing to content (gap before dropdowns/sections) */
+  .contest-actions {
+    margin-bottom: 16px;
+  }
   .toggle-buttons {
     margin-bottom: 20px; /* gap between buttons and the panels below */
     /* no need sticky here since whole column is sticky */

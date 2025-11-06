@@ -141,3 +141,7 @@ class RankInfoSerializer(serializers.ModelSerializer):
     class Meta:
         model = UserProfile
         fields = "__all__"
+
+
+class EmailVerifySerializer(serializers.Serializer):
+    token = serializers.CharField(max_length=128)
