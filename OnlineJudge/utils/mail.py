@@ -1,7 +1,7 @@
 from datetime import datetime
 from django.template.loader import render_to_string
 from options.options import SysOptions
-from account.tasks import send_email_async
+from utils.shortcuts import send_email as send_email_sync
 
 
 def send_verification_email(user):
@@ -23,11 +23,13 @@ def send_verification_email(user):
         html = render_to_string("verify_email.html", data)
     except Exception:
         html = f"<p>Hello {user.username}, verify: <a href='{link}'>{link}</a></p>"
-    send_email_async.send(from_name=SysOptions.website_name_shortcut,
-                          to_email=user.email,
-                          to_name=user.username,
-                          subject="Verify your email",
-                          content=html)
+    # Direct synchronous send (simplified; removed async for reliability in your environment)
+    send_email_sync(smtp_config=SysOptions.smtp_config,
+                    from_name=SysOptions.website_name_shortcut,
+                    to_email=user.email,
+                    to_name=user.username,
+                    subject="Verify your email",
+                    content=html)
 
 
 def send_contest_result_email(user, contest, attempt, problem_stats):
@@ -62,8 +64,9 @@ def send_contest_result_email(user, contest, attempt, problem_stats):
     {table_html}
     <p>Generated at {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC</p>
     """
-    send_email_async.send(from_name=SysOptions.website_name_shortcut,
-                          to_email=user.email,
-                          to_name=user.username,
-                          subject=f"Contest Result - {contest.title}",
-                          content=html)
+    send_email_sync(smtp_config=SysOptions.smtp_config,
+                    from_name=SysOptions.website_name_shortcut,
+                    to_email=user.email,
+                    to_name=user.username,
+                    subject=f"Contest Result - {contest.title}",
+                    content=html)

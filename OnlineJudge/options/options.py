@@ -276,6 +276,11 @@ class _SysOptionsMeta(type):
     def reset_languages(cls):
         cls.languages = languages
 
-
 class SysOptions(metaclass=_SysOptionsMeta):
     pass
+
+# Dev note: to manually test email in a shell:
+# from account.models import User
+# from utils.mail import send_verification_email
+# u = User.objects.get(username="testmail")
+# send_verification_email(u)

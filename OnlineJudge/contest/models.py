@@ -6,12 +6,12 @@ from utils.models import JSONField
 from utils.constants import ContestStatus, ContestType
 from account.models import User
 from utils.models import RichTextField
-from problem.models import Problem
 
 
 class ContestAttempt(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE)
-    contest = models.ForeignKey('Contest', on_delete=models.CASCADE)
+    # Use explicit app label for lazy relation to avoid resolution issues during migrations
+    contest = models.ForeignKey('contest.Contest', on_delete=models.CASCADE)
     attempt_no = models.IntegerField(default=1)
     started = models.BooleanField(default=False)
     started_at = models.DateTimeField(null=True)
@@ -27,7 +27,7 @@ class ContestAttempt(models.Model):
 
 class ContestAttemptProblemStat(models.Model):
     attempt = models.ForeignKey(ContestAttempt, on_delete=models.CASCADE, related_name='problem_stats')
-    problem = models.ForeignKey(Problem, on_delete=models.CASCADE)
+    problem = models.ForeignKey('problem.Problem', on_delete=models.CASCADE)
     attempts = models.IntegerField(default=0)
     best_result = models.IntegerField(default=0)
     passed_cases = models.IntegerField(default=0)
@@ -57,6 +57,8 @@ class Contest(models.Model):
     # 是否可见 false的话相当于删除
     visible = models.BooleanField(default=True)
     allowed_ip_ranges = JSONField(default=list)
+    # Timestamp when bulk result emails were last sent (to avoid duplicates)
+    results_emailed_at = models.DateTimeField(null=True, blank=True)
 
     @property
     def status(self):

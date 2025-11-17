@@ -11,6 +11,8 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ('submission', '0006_auto_20170830_1154'),
+        ('contest', '0001_initial'),  # Ensure Contest model exists before referencing it
+        ('problem', '0001_initial'),  # Ensure Problem model exists before referencing it
     ]
 
     operations = [

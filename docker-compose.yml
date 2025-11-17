@@ -2,88 +2,103 @@ services:
   postgres:
     image: postgres:10-alpine
     container_name: oj-postgres
-    restart: always
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-onlinejudge}
+      POSTGRES_USER: ${POSTGRES_USER:-onlinejudge}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-onlinejudge}
     volumes:
       - ./OnlineJudge/data/postgres:/var/lib/postgresql/data
-    environment:
-      - POSTGRES_DB=onlinejudge
-      - POSTGRES_USER=onlinejudge
-      - POSTGRES_PASSWORD=onlinejudge
     ports:
-      - "5432:5432"
+      - "${POSTGRES_HOST_PORT:-5435}:5432"
     networks:
       - oj-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U onlinejudge"]
-      interval: 5s
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-onlinejudge} -d ${POSTGRES_DB:-onlinejudge}" ]
+      interval: 10s
       timeout: 5s
       retries: 5
 
   redis:
-    image: redis:4.0-alpine
+    image: redis:6-alpine
     container_name: oj-redis
-    restart: always
+    restart: unless-stopped
+    ports:
+      - "${REDIS_HOST_PORT:-6380}:6379"
+    networks:
+      - oj-network
+
+  backend:
+    build:
+      context: ./OnlineJudge
+    image: oj-app:latest
+    container_name: oj-app
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      OJ_ENV: production
+      POSTGRES_HOST: oj-postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB:-onlinejudge}
+      POSTGRES_USER: ${POSTGRES_USER:-onlinejudge}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-onlinejudge}
+      REDIS_HOST: oj-redis
+      REDIS_PORT: 6379
+      JUDGE_SERVER_TOKEN: ${JUDGE_SERVER_TOKEN:-token123}
     volumes:
-      - ./OnlineJudge/data/redis:/data
+      - ./OnlineJudge:/app
+      - ./OnlineJudge/data:/data
+    ports:
+      - "8000:8000"
+    depends_on:
+      - postgres
+      - redis
     networks:
       - oj-network
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/api/website || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
 
-  backend:
-    image: registry.cn-hangzhou.aliyuncs.com/onlinejudge/oj_backend
-    platform: linux/amd64
-    container_name: oj-backend
-    restart: always
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    volumes:
-      - ./OnlineJudge/data/backend:/data
-      - ./OnlineJudge/data/test_case:/test_case
-      - ./OnlineJudge/data/log:/log
+  frontend:
+    build:
+      context: ./OnlineJudgeFE
+      dockerfile: Dockerfile.dev
+    image: oj-fe-dev:latest
+    container_name: oj-fe
+    restart: unless-stopped
+    env_file: .env
     environment:
-      - POSTGRES_DB=onlinejudge
-      - POSTGRES_USER=onlinejudge
-      - POSTGRES_PASSWORD=onlinejudge
-      - POSTGRES_HOST=postgres
-      - POSTGRES_PORT=5432
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-      - JUDGE_SERVER_TOKEN=CHANGE_THIS
+      TARGET: http://oj-app:8000
+    volumes:
+      - ./OnlineJudgeFE:/app
     ports:
-      - "8000:8000"
+      - "8080:8080"
+    depends_on:
+      - backend
     networks:
       - oj-network
 
   judge-server:
     image: oj-judge-server:local
     container_name: oj-judge-server
-    restart: always
-    depends_on:
-      backend:
-        condition: service_started
-    volumes:
-      - ./OnlineJudge/data/backend/test_case:/test_case:ro
-      - ./OnlineJudge/data/log:/log
+    restart: unless-stopped
+    env_file: .env
     environment:
-      - SERVICE_URL=http://judge-server:8080
-      - BACKEND_URL=http://backend:8000/api/judge_server_heartbeat/
-      - TOKEN=CHANGE_THIS
-    ports:
-      - "12358:8080"
-    security_opt:
-      - seccomp:unconfined
-    cap_add:
-      - SYS_PTRACE
-    privileged: true
+      BACKEND_URL: ${JUDGE_SERVER_BACKEND_URL:-http://oj-app:8000/api/judge_server_heartbeat/}
+      SERVICE_URL: ${JUDGE_SERVER_SERVICE_URL:-http://oj-judge-server:8080}
+      TOKEN: ${JUDGE_SERVER_TOKEN:-token123}
+    depends_on:
+      - backend
+      - redis
     networks:
       - oj-network
+    volumes:
+      - ./OnlineJudge/data/log/judge-server:/log
+      - ./OnlineJudge/data/judger-run:/judger
+      - ./OnlineJudge/data/test_case:/test_case:ro
 
 networks:
   oj-network:

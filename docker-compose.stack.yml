@@ -1,0 +1,83 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:10-alpine
+    container_name: oj-postgres
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-onlinejudge}
+      POSTGRES_USER: ${POSTGRES_USER:-onlinejudge}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-onlinejudge}
+      OJ_ENV: production
+    volumes:
+      - ./OnlineJudge/data/postgres:/var/lib/postgresql/data
+      - ./OnlineJudge/data:/data
+    networks:
+      - oj-network
+    ports:
+      - "5435:5432"
+
+  redis:
+    image: redis:6-alpine
+    container_name: oj-redis
+    restart: unless-stopped
+    ports:
+      - "6380:6379"
+    networks:
+      - oj-network
+
+  backend:
+    image: oj-app:latest
+    container_name: oj-app
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=${POSTGRES_DB:-onlinejudge}
+      - POSTGRES_USER=${POSTGRES_USER:-onlinejudge}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-onlinejudge}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - OJ_ENV=production
+    volumes:
+      - ./OnlineJudge:/app
+      - ./OnlineJudge/data:/data
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - oj-network
+    ports:
+      - "8000:8000"
+
+  frontend:
+    image: oj-fe-dev:latest
+    container_name: oj-fe
+    restart: unless-stopped
+    environment:
+      - TARGET=http://oj-app:8000
+    volumes:
+      - ./OnlineJudgeFE:/app
+    ports:
+      - "8080:8080"
+    networks:
+      - oj-network
+    depends_on:
+      - backend
+
+  judge:
+    image: oj-judge-server:local
+    container_name: oj-judge-server
+    restart: unless-stopped
+    networks:
+      - oj-network
+    depends_on:
+      - backend
+      - redis
+
+networks:
+  oj-network:
+    external: true

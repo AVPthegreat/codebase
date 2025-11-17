@@ -2,6 +2,8 @@ from problem.models import ProblemIOMode
 
 
 _default_env = ["LANG=en_US.UTF-8", "LANGUAGE=en_US:en", "LC_ALL=en_US.UTF-8"]
+# Backward compatibility: code below expects `default_env`
+default_env = _default_env
 
 # NOTE: All 6 languages are now operational (C, C++, Java, Python3, JavaScript, Golang)
 # - Python3: Fixed to run .py source directly with -BS flags instead of .pyc bytecode

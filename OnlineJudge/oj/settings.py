@@ -10,7 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/1.8/ref/settings/
 """
 import os
-import raven
+# import raven  # Disabled: Python 3.12 incompatibility
 from copy import deepcopy
 from utils.shortcuts import get_env
 
@@ -38,7 +38,8 @@ VENDOR_APPS = [
 ]
 
 if production_env:
-    VENDOR_APPS.append('raven.contrib.django.raven_compat')
+    # VENDOR_APPS.append('raven.contrib.django.raven_compat')  # Disabled: Python 3.12 incompatibility
+    pass
 
 
 LOCAL_APPS = [
@@ -138,7 +139,7 @@ UPLOAD_DIR = f"{DATA_DIR}{UPLOAD_PREFIX}"
 STATICFILES_DIRS = [os.path.join(DATA_DIR, "public")]
 
 
-LOGGING_HANDLERS = ['console', 'sentry'] if production_env else ['console']
+LOGGING_HANDLERS = ['console']  # Sentry disabled due to Python 3.12 incompatibility
 LOGGING = {
    'version': 1,
    'disable_existing_loggers': False,
@@ -154,11 +155,11 @@ LOGGING = {
            'class': 'logging.StreamHandler',
            'formatter': 'standard'
        },
-       'sentry': {
-           'level': 'ERROR',
-           'class': 'raven.contrib.django.raven_compat.handlers.SentryHandler',
-           'formatter': 'standard'
-       }
+       # 'sentry': {
+       #     'level': 'ERROR',
+       #     'class': 'raven.contrib.django.raven_compat.handlers.SentryHandler',
+       #     'formatter': 'standard'
+       # },
    },
    'loggers': {
        'django.request': {
@@ -240,9 +241,9 @@ DRAMATIQ_RESULT_BACKEND = {
     }
 }
 
-RAVEN_CONFIG = {
-    'dsn': 'https://b200023b8aed4d708fb593c5e0a6ad3d:1fddaba168f84fcf97e0d549faaeaff0@sentry.io/263057'
-}
+# RAVEN_CONFIG = {
+#     'dsn': 'https://b200023b8aed4d708fb593c5e0a6ad3d:1fddaba168f84fcf97e0d549faaeaff0@sentry.io/263057'
+# }
 
 IP_HEADER = "HTTP_X_REAL_IP"
 
