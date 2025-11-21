@@ -312,8 +312,29 @@ class ContestUserOverviewAPI(APIView):
         attempt = ContestAttempt.objects.filter(user=request.user, contest=contest).order_by('-attempt_no').first()
         if not attempt:
             return self.success(None)
-        # aggregate latest submission stats for each problem
+            
+        # Self-healing: Ensure all visible problems have a stat row
+        # This handles cases where problems were added after contest start
+        problems = Problem.objects.filter(contest=contest, visible=True).order_by('_id')
+        existing_stats = set(attempt.problem_stats.values_list('problem_id', flat=True))
+        new_stats = []
+        for p in problems:
+            if p.id not in existing_stats:
+                new_stats.append(ContestAttemptProblemStat(attempt=attempt, problem=p))
+        if new_stats:
+            ContestAttemptProblemStat.objects.bulk_create(new_stats)
+            
+        # Refresh stats map
         stats_map = {ps.problem_id: ps for ps in attempt.problem_stats.all()}
+        
+        # Reset stats in memory to avoid stale accumulation if re-calculating
+        for ps in stats_map.values():
+            ps.attempts = 0
+            ps.best_result = 0 # Reset to NA/0
+            ps.passed_cases = 0
+            ps.total_cases = 0
+            ps.score = 0
+            
         submissions = Submission.objects.filter(user_id=request.user.id, contest=contest).order_by('create_time')
         for sub in submissions:
             ps = stats_map.get(sub.problem_id)
@@ -343,7 +364,13 @@ class ContestUserOverviewAPI(APIView):
             if total_cases > 0:
                 score = int(100 * passed_cases / total_cases)
             ps.score = max(ps.score, score)
-            ps.save(update_fields=['attempts', 'best_result', 'passed_cases', 'total_cases', 'score'])
+        
+        # Bulk update for performance
+        ContestAttemptProblemStat.objects.bulk_update(
+            stats_map.values(), 
+            ['attempts', 'best_result', 'passed_cases', 'total_cases', 'score']
+        )
+            
         return self.success(ContestAttemptSerializer(attempt).data)
 
 

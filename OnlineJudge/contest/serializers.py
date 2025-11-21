@@ -113,11 +113,12 @@ class ACMContesHelperSerializer(serializers.Serializer):
 
 class ContestAttemptProblemStatSerializer(serializers.ModelSerializer):
     problem_id = serializers.IntegerField(source='problem.id', read_only=True)
+    _id = serializers.CharField(source='problem._id', read_only=True)
     problem_title = serializers.CharField(source='problem.title', read_only=True)
 
     class Meta:
         model = ContestAttemptProblemStat
-        fields = ['problem_id', 'problem_title', 'attempts', 'best_result', 'passed_cases', 'total_cases', 'score']
+        fields = ['problem_id', '_id', 'problem_title', 'attempts', 'best_result', 'passed_cases', 'total_cases', 'score']
 
 
 class ContestAttemptSerializer(serializers.ModelSerializer):

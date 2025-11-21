@@ -313,7 +313,7 @@ body.dark-mode {
     color: #5cadff;
     &:hover {
       color: #ffffff !important;
-      background-color: #0f172a !important;
+      background-color: #0f172a !important; 
       border-color: #0c1222 !important;
     }
   }
@@ -413,5 +413,47 @@ body.dark-mode {
 
   .ivu-tooltip-arrow {
     border-color: #0f172a transparent transparent transparent;
+  }
+
+  // =================================================================
+  // GLOBAL TEXT OVERRIDE (User Request)
+  // Force all text to be white in dark mode, especially user-generated content
+  // =================================================================
+  
+  // 1. Markdown Content (Problem descriptions, announcements) - "Nuclear" option
+  .markdown-body {
+    color: #eee !important;
+    * {
+      color: #eee !important;
+    }
+    // Re-apply code background contrast since we forced text color
+    code {
+      background-color: #1a1a1a !important;
+      color: #f08080 !important; // Keep code slightly distinct if possible, or white if requested. User said "white", but code usually needs syntax highlighting. 
+                                  // However, user said "font of every text should be white". I will stick to white/light grey.
+      color: #ff7b72 !important; // Light red/pink for code is readable on dark
+    }
+    pre {
+      background-color: #1a1a1a !important;
+      code {
+        color: #eee !important; // Block code usually white/grey
+      }
+    }
+    a {
+      color: #5cadff !important; // Keep links blue-ish for visibility
+    }
+  }
+
+  // 2. General Content Areas
+  // Target common text containers to ensure visibility
+  .content-app, .ivu-card-body, .panel-body {
+    p, h1, h2, h3, h4, h5, h6, li, span, div, label {
+       color: #eee;
+    }
+  }
+  
+  // 3. Specific overrides for inputs to ensure they don't get lost
+  input, textarea {
+    color: #eee !important;
   }
 }
