@@ -26,6 +26,7 @@
         </CarouselItem>
       </Carousel>
     </panel>
+    <DailyChallenge class="daily-challenge-card"></DailyChallenge>
     <Announcements class="announcement"></Announcements>
     </Col>
   </Row>
@@ -33,6 +34,7 @@
 
 <script>
   import Announcements from './Announcements.vue'
+  import DailyChallenge from './DailyChallenge.vue'
   import api from '@oj/api'
   import time from '@/utils/time'
   import { CONTEST_STATUS } from '@/utils/constants'
@@ -40,7 +42,8 @@
   export default {
     name: 'home',
     components: {
-      Announcements
+      Announcements,
+      DailyChallenge
     },
     data () {
       return {
@@ -87,5 +90,10 @@
     /deep/ .ivu-page {
       display: none;
     }
+  }
+  
+  .daily-challenge-card {
+    margin-top: 20px;
+    width: 350px;
   }
 </style>

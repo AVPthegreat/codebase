@@ -474,3 +474,40 @@ class SSOAPI(CSRFExemptAPIView):
         except User.DoesNotExist:
             return self.error("User does not exist")
         return self.success({"username": user.username, "avatar": user.userprofile.avatar, "admin_type": user.admin_type})
+
+
+class UserSubmissionHeatmapAPI(APIView):
+    def get(self, request):
+        username = request.GET.get("username")
+        if not username:
+            return self.error("Username is required")
+        try:
+            user = User.objects.get(username=username)
+        except User.DoesNotExist:
+            return self.error("User does not exist")
+        
+        # Get submissions for the last year
+        end_date = now()
+        start_date = end_date - timedelta(days=365)
+        
+        # We need to import Submission here to avoid circular imports if possible, 
+        # or check if it's already imported. It is not imported in the file snippet I saw.
+        from submission.models import Submission
+        
+        submissions = Submission.objects.filter(
+            user_id=user.id, 
+            create_time__gte=start_date
+        ).values('create_time')
+        
+        # Aggregate by date
+        date_counts = {}
+        for sub in submissions:
+            # Convert to local date string (YYYY-MM-DD)
+            # Note: create_time is UTC. For simple heatmap, UTC date is usually fine, 
+            # or we can convert to server local time.
+            date_str = sub['create_time'].strftime('%Y-%m-%d')
+            date_counts[date_str] = date_counts.get(date_str, 0) + 1
+            
+        # Format for ECharts: [[date, count], ...]
+        data = [[date, count] for date, count in date_counts.items()]
+        return self.success(data)

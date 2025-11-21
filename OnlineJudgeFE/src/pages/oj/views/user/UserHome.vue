@@ -12,6 +12,22 @@
         <p v-if="profile.mood">
           {{profile.mood}}
         </p>
+        <p v-if="profile.mood">
+          {{profile.mood}}
+        </p>
+        
+        <!-- Gamification Section -->
+        <div class="gamification-section" v-if="profile.user">
+          <div class="level-badge">
+            <span class="level-text">Level {{ level }}</span>
+          </div>
+          <div class="xp-bar">
+            <Progress :percent="xpPercent" status="active" :stroke-width="18">
+              <span style="color: #333; font-weight: bold;">{{ profile.xp }} / {{ nextLevelXp }} XP</span>
+            </Progress>
+          </div>
+        </div>
+
         <hr id="split"/>
 
         <div class="flex-container">
@@ -58,14 +74,26 @@
         </div>
       </div>
     </Card>
+    
+    <!-- Heatmap Section -->
+    <Card :padding="20" style="margin-top: 20px; text-align: left;">
+      <div slot="title">
+         <span class="emphasis">{{$t('m.Submission_Activity')}}</span>
+      </div>
+      <SubmissionHeatmap :username="username" v-if="username"></SubmissionHeatmap>
+    </Card>
   </div>
 </template>
 <script>
   import { mapActions } from 'vuex'
   import time from '@/utils/time'
   import api from '@oj/api'
+  import SubmissionHeatmap from '@oj/components/SubmissionHeatmap.vue'
 
   export default {
+    components: {
+      SubmissionHeatmap
+    },
     data () {
       return {
         username: '',
@@ -118,6 +146,20 @@
         if (!this.username) return true
         if (this.username && this.username === this.$store.getters.user.username) return true
         return false
+      },
+      level () {
+        if (!this.profile.xp) return 1
+        return Math.floor(Math.sqrt(this.profile.xp / 10)) + 1
+      },
+      nextLevelXp () {
+        return 10 * Math.pow(this.level, 2)
+      },
+      xpPercent () {
+        if (!this.profile.xp) return 0
+        let currentLevelStart = 10 * Math.pow(this.level - 1, 2)
+        let nextLevelStart = 10 * Math.pow(this.level, 2)
+        let progress = (this.profile.xp - currentLevelStart) / (nextLevelStart - currentLevelStart) * 100
+        return Math.min(Math.max(progress, 0), 100)
       }
     },
     watch: {
@@ -196,6 +238,19 @@
       transform: translate(-50%);
       .icon {
         padding-left: 20px;
+      }
+    }
+    .gamification-section {
+      margin-top: 20px;
+      padding: 0 40px;
+      .level-badge {
+        font-size: 24px;
+        font-weight: bold;
+        color: #2d8cf0;
+        margin-bottom: 10px;
+      }
+      .xp-bar {
+        width: 100%;
       }
     }
   }

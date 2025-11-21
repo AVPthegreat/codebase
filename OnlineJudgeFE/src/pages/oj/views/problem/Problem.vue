@@ -1,227 +1,180 @@
 <template>
-  <div class="flex-container">
-    <div id="problem-main">
-      <!--problem main-->
-      <Panel :padding="40" shadow>
-        <div slot="title">{{problem.title}}</div>
-        <div id="problem-content" class="markdown-body" v-katex>
-          <p class="title">{{$t('m.Description')}}</p>
-          <p class="content" v-html=problem.description></p>
-          <!-- {{$t('m.music')}} -->
-          <p class="title">{{$t('m.Input')}} <span v-if="problem.io_mode.io_mode=='File IO'">({{$t('m.FromFile')}}: {{ problem.io_mode.input }})</span></p>
-          <p class="content" v-html=problem.input_description></p>
+  <div class="split-container">
+    <!-- Left Column: Problem Description & Info -->
+    <div id="problem-left">
+      <Card :padding="20" dis-hover class="full-height-card">
+        <Tabs value="description" :animated="false">
+          <TabPane :label="$t('m.Description')" name="description">
+            <div id="problem-content" class="markdown-body" v-katex>
+              <div class="header-title">{{problem.title}}</div>
+              <p class="title">{{$t('m.Description')}}</p>
+              <p class="content" v-html=problem.description></p>
+              
+              <p class="title">{{$t('m.Input')}} <span v-if="problem.io_mode.io_mode=='File IO'">({{$t('m.FromFile')}}: {{ problem.io_mode.input }})</span></p>
+              <p class="content" v-html=problem.input_description></p>
 
-          <p class="title">{{$t('m.Output')}} <span v-if="problem.io_mode.io_mode=='File IO'">({{$t('m.ToFile')}}: {{ problem.io_mode.output }})</span></p>
-          <p class="content" v-html=problem.output_description></p>
+              <p class="title">{{$t('m.Output')}} <span v-if="problem.io_mode.io_mode=='File IO'">({{$t('m.ToFile')}}: {{ problem.io_mode.output }})</span></p>
+              <p class="content" v-html=problem.output_description></p>
 
-          <div v-for="(sample, index) of problem.samples" :key="index">
-            <div class="flex-container sample">
-              <div class="sample-input">
-                <p class="title">{{$t('m.Sample_Input')}} {{index + 1}}
-                  <a class="copy"
-                     v-clipboard:copy="sample.input"
-                     v-clipboard:success="onCopy"
-                     v-clipboard:error="onCopyError">
-                    <Icon type="clipboard"></Icon>
-                  </a>
-                </p>
-                <pre>{{sample.input}}</pre>
+              <div v-for="(sample, index) of problem.samples" :key="index">
+                <div class="flex-container sample">
+                  <div class="sample-input">
+                    <p class="title">{{$t('m.Sample_Input')}} {{index + 1}}
+                      <a class="copy"
+                         v-clipboard:copy="sample.input"
+                         v-clipboard:success="onCopy"
+                         v-clipboard:error="onCopyError">
+                        <Icon type="clipboard"></Icon>
+                      </a>
+                    </p>
+                    <pre>{{sample.input}}</pre>
+                  </div>
+                  <div class="sample-output">
+                    <p class="title">{{$t('m.Sample_Output')}} {{index + 1}}</p>
+                    <pre>{{sample.output}}</pre>
+                  </div>
+                </div>
               </div>
-              <div class="sample-output">
-                <p class="title">{{$t('m.Sample_Output')}} {{index + 1}}</p>
-                <pre>{{sample.output}}</pre>
+
+              <div v-if="problem.hint">
+                <p class="title">{{$t('m.Hint')}}</p>
+                <Card dis-hover>
+                  <div class="content" v-html=problem.hint></div>
+                </Card>
+              </div>
+
+              <div v-if="problem.source">
+                <p class="title">{{$t('m.Source')}}</p>
+                <p class="content">{{problem.source}}</p>
+              </div>
+              
+              <div class="editorial-section">
+                <p class="title">Editorial</p>
+                <div v-if="editorialLoading">
+                  <Spin size="large"></Spin>
+                </div>
+                <div v-else-if="editorialError">
+                  <Alert type="warning" show-icon>{{ editorialError }}</Alert>
+                </div>
+                <div v-else-if="editorial">
+                  <Card dis-hover>
+                    <div class="content" v-html="editorial"></div>
+                  </Card>
+                </div>
+                <div v-else>
+                  <Button type="primary" @click="loadEditorial" :loading="editorialLoading">
+                    View Editorial
+                  </Button>
+                </div>
               </div>
             </div>
-          </div>
+          </TabPane>
 
-          <div v-if="problem.hint">
-            <p class="title">{{$t('m.Hint')}}</p>
-            <Card dis-hover>
-              <div class="content" v-html=problem.hint></div>
-            </Card>
-          </div>
-
-          <div v-if="problem.source">
-            <p class="title">{{$t('m.Source')}}</p>
-            <p class="content">{{problem.source}}</p>
-          </div>
-
-          <div class="editorial-section">
-            <p class="title">Editorial</p>
-            <div v-if="editorialLoading">
-              <Spin size="large"></Spin>
-            </div>
-            <div v-else-if="editorialError">
-              <Alert type="warning" show-icon>{{ editorialError }}</Alert>
-            </div>
-            <div v-else-if="editorial">
-              <Card dis-hover>
-                <div class="content" v-html="editorial"></div>
-              </Card>
-            </div>
-            <div v-else>
-              <Button type="primary" @click="loadEditorial" :loading="editorialLoading">
-                View Editorial
-              </Button>
-            </div>
-          </div>
-
-        </div>
-      </Panel>
-      <!--problem main end-->
-      <Card :padding="20" id="submit-code" dis-hover>
-        <CodeMirror :value.sync="code"
-                    :languages="problem.languages"
-                    :language="language"
-                    :theme="theme"
-                    @resetCode="onResetToTemplate"
-                    @changeTheme="onChangeTheme"
-                    @changeLang="onChangeLang"></CodeMirror>
-        <Row type="flex" justify="space-between">
-          <Col :span="10">
-            <div class="status" v-if="statusVisible">
-              <template v-if="!this.contestID || (this.contestID && OIContestRealTimePermission)">
-                <span>{{$t('m.Status')}}</span>
-                <Tag type="dot" :color="submissionStatus.color" @click.native="handleRoute('/status/'+submissionId)">
-                  {{$t('m.' + submissionStatus.text.replace(/ /g, "_"))}}
-                </Tag>
-              </template>
-              <template v-else-if="this.contestID && !OIContestRealTimePermission">
-                <Alert type="success" show-icon>{{$t('m.Submitted_successfully')}}</Alert>
-              </template>
-            </div>
-            <div v-else-if="problem.my_status === 0">
-              <Alert type="success" show-icon>{{$t('m.You_have_solved_the_problem')}}</Alert>
-            </div>
-            <div v-else-if="this.contestID && !OIContestRealTimePermission && submissionExists">
-              <Alert type="success" show-icon>{{$t('m.You_have_submitted_a_solution')}}</Alert>
-            </div>
-            <div v-if="contestEnded">
-              <Alert type="warning" show-icon>{{$t('m.Contest_has_ended')}}</Alert>
-            </div>
-          </Col>
-
-          <Col :span="12">
-            <template v-if="captchaRequired">
-              <div class="captcha-container">
-                <Tooltip v-if="captchaRequired" content="Click to refresh" placement="top">
-                  <img :src="captchaSrc" @click="getCaptchaSrc"/>
-                </Tooltip>
-                <Input v-model="captchaCode" class="captcha-code"/>
-              </div>
-            </template>
-            <Button type="warning" icon="edit" :loading="submitting" @click="submitCode"
-                    :disabled="problemSubmitDisabled || submitted"
-                    class="fl-right">
-              <span v-if="submitting">{{$t('m.Submitting')}}</span>
-              <span v-else>{{$t('m.Submit')}}</span>
-            </Button>
-          </Col>
-        </Row>
+          <TabPane :label="$t('m.Information')" name="info">
+             <div class="info-content">
+              <ul>
+                <li><p>ID</p><p>{{problem._id}}</p></li>
+                <li><p>{{$t('m.Time_Limit')}}</p><p>{{problem.time_limit}}MS</p></li>
+                <li><p>{{$t('m.Memory_Limit')}}</p><p>{{problem.memory_limit}}MB</p></li>
+                <li><p>{{$t('m.IOMode')}}</p><p>{{problem.io_mode.io_mode}}</p></li>
+                <li><p>{{$t('m.Created')}}</p><p>{{problem.created_by.username}}</p></li>
+                <li v-if="problem.difficulty"><p>{{$t('m.Level')}}</p><p>{{$t('m.' + problem.difficulty)}}</p></li>
+                <li v-if="problem.total_score"><p>{{$t('m.Score')}}</p><p>{{problem.total_score}}</p></li>
+                <li><p>{{$t('m.Tags')}}</p>
+                  <p>
+                    <Tag v-for="tag in problem.tags" :key="tag">{{tag}}</Tag>
+                  </p>
+                </li>
+              </ul>
+             </div>
+          </TabPane>
+          
+          <TabPane :label="$t('m.Statistic')" name="statistics">
+             <div class="echarts">
+                <ECharts :options="pie"></ECharts>
+             </div>
+          </TabPane>
+        </Tabs>
       </Card>
     </div>
 
+    <!-- Right Column: Code Editor -->
+    <div id="problem-right">
+      <Card :padding="0" dis-hover class="full-height-card editor-card">
+        <div class="editor-header">
+           <span class="lang-select">
+             <span>Language: </span>
+             <Select :value="language" @on-change="onChangeLang" size="small" style="width: 100px">
+                <Option v-for="item in problem.languages" :value="item" :key="item">{{item}}</Option>
+             </Select>
+           </span>
+           <span class="theme-select">
+             <span>Theme: </span>
+             <Select :value="theme" @on-change="onChangeTheme" size="small" style="width: 100px">
+                <Option value="solarized">Solarized</Option>
+                <Option value="monokai">Monokai</Option>
+                <Option value="material">Material</Option>
+             </Select>
+           </span>
+           <Button type="text" icon="refresh" @click="onResetToTemplate">{{$t('m.Reset_to_default_code_definition')}}</Button>
+        </div>
+        
+        <div class="editor-container">
+          <CodeMirror :value.sync="code"
+                      :languages="problem.languages"
+                      :language="language"
+                      :theme="theme"
+                      @resetCode="onResetToTemplate"
+                      @changeTheme="onChangeTheme"
+                      @changeLang="onChangeLang"></CodeMirror>
+        </div>
 
-    <div id="right-column">
-      <div v-if="contestStarted && contestID" class="contest-actions">
-        <Button type="primary" long @click="handleViewOverview" style="margin-bottom: 8px;">View Overview</Button>
-        <Button type="error" long @click="handleSubmitContest">Submit Contest</Button>
-      </div>
-      <div class="toggle-buttons grid-2x2">
-        <Button class="toggle-btn" :type="activePanel==='info' ? 'primary' : 'default'" @click="activePanel='info'">
-          <Icon type="information-circled" /> {{$t('m.Information')}}
-        </Button>
-        <Button class="toggle-btn" type="default" @click="goToSubmissions">
-          <Icon type="navicon-round" /> {{$t('m.Submissions')}}
-        </Button>
-        <Button class="toggle-btn" :type="activePanel==='statistics' ? 'primary' : 'default'" @click="activePanel='statistics'">
-          <Icon type="ios-analytics" /> {{$t('m.Statistic')}}
-        </Button>
-        <Button class="toggle-btn" :disabled="contestStarted" :type="activePanel==='discussion' ? 'primary' : 'default'" @click="activePanel='discussion'">
-          <Icon type="chatbubble-working" /> Discussion
-        </Button>
-      </div>
-
-      <div v-show="activePanel==='info'">
-        <Card id="info">
-          <div slot="title" class="header">
-            <Icon type="information-circled"></Icon>
-            <span class="card-title">{{$t('m.Information')}}</span>
-          </div>
-          <ul>
-            <li><p>ID</p>
-              <p>{{problem._id}}</p></li>
-            <li>
-              <p>{{$t('m.Time_Limit')}}</p>
-              <p>{{problem.time_limit}}MS</p></li>
-            <li>
-              <p>{{$t('m.Memory_Limit')}}</p>
-              <p>{{problem.memory_limit}}MB</p></li>
-            <li>
-              <p>{{$t('m.IOMode')}}</p>
-              <p>{{problem.io_mode.io_mode}}</p>
-            </li>
-            <li>
-              <p>{{$t('m.Created')}}</p>
-              <p>{{problem.created_by.username}}</p></li>
-            <li v-if="problem.difficulty">
-              <p>{{$t('m.Level')}}</p>
-              <p>{{$t('m.' + problem.difficulty)}}</p></li>
-            <li v-if="problem.total_score">
-              <p>{{$t('m.Score')}}</p>
-              <p>{{problem.total_score}}</p>
-            </li>
-            <li>
-              <p>{{$t('m.Tags')}}</p>
-              <p>
-                <Poptip trigger="hover" placement="left-end">
-                  <a>{{$t('m.Show')}}</a>
-                  <div slot="content">
-                    <Tag v-for="tag in problem.tags" :key="tag">{{tag}}</Tag>
-                  </div>
-                </Poptip>
-              </p>
-            </li>
-          </ul>
-        </Card>
-      </div>
-
-      
-
-      <div v-show="activePanel==='statistics'">
-        <Card id="pieChart" :padding="0" v-if="!this.contestID || OIContestRealTimePermission">
-          <div slot="title">
-            <Icon type="ios-analytics"></Icon>
-            <span class="card-title">{{$t('m.Statistic')}}</span>
-            <Button type="ghost" size="small" id="detail" @click="graphVisible = !graphVisible">Details</Button>
-          </div>
-          <div class="echarts">
-            <ECharts :options="pie"></ECharts>
-          </div>
-        </Card>
-      </div>
-
-      <div v-show="activePanel==='discussion'">
-        <Card>
-          <div slot="title">
-            <Icon type="chatbubble-working" /> Discussion
-          </div>
-          <div>
-            <Input v-model="discussionMessage" type="textarea" :rows="4" :maxlength="500" placeholder="Ask for help or report an issue..." />
-            <div style="margin-top: 10px; text-align: right;">
-              <Button type="primary" :disabled="!discussionMessage.trim() || contestStarted" @click="sendDiscussion">Send</Button>
-            </div>
-          </div>
-        </Card>
-      </div>
+        <div class="editor-footer">
+          <Row type="flex" justify="space-between" align="middle">
+            <Col :span="12">
+              <div class="status" v-if="statusVisible">
+                <template v-if="!this.contestID || (this.contestID && OIContestRealTimePermission)">
+                  <Tag type="dot" :color="submissionStatus.color" @click.native="handleRoute('/status/'+submissionId)">
+                    {{$t('m.' + submissionStatus.text.replace(/ /g, "_"))}}
+                  </Tag>
+                </template>
+                <template v-else-if="this.contestID && !OIContestRealTimePermission">
+                  <Alert type="success" show-icon>{{$t('m.Submitted_successfully')}}</Alert>
+                </template>
+              </div>
+              <div v-else-if="problem.my_status === 0">
+                <Alert type="success" show-icon>{{$t('m.You_have_solved_the_problem')}}</Alert>
+              </div>
+            </Col>
+            <Col :span="12" style="text-align: right;">
+              <template v-if="captchaRequired">
+                <div class="captcha-container">
+                  <Tooltip v-if="captchaRequired" content="Click to refresh" placement="top">
+                    <img :src="captchaSrc" @click="getCaptchaSrc"/>
+                  </Tooltip>
+                  <Input v-model="captchaCode" class="captcha-code"/>
+                </div>
+              </template>
+              <Button type="warning" icon="edit" :loading="submitting" @click="submitCode"
+                      :disabled="problemSubmitDisabled || submitted">
+                <span v-if="submitting">{{$t('m.Submitting')}}</span>
+                <span v-else>{{$t('m.Submit')}}</span>
+              </Button>
+              <Button type="primary" icon="help-buoy" :loading="hintLoading" @click="getAIHint" style="margin-left: 10px;">
+                <span v-if="hintLoading">Thinking...</span>
+                <span v-else>AI Hint</span>
+              </Button>
+            </Col>
+          </Row>
+        </div>
+      </Card>
     </div>
 
-    <Modal v-model="graphVisible">
-      <div id="pieChart-detail">
-        <ECharts :options="largePie" :initOptions="largePieInitOpts"></ECharts>
-      </div>
+    <!-- AI Hint Modal -->
+    <Modal v-model="hintVisible" title="AI Senpai Says..." width="600">
+      <div class="markdown-body" v-html="hintContent"></div>
       <div slot="footer">
-        <Button type="ghost" @click="graphVisible=false">{{$t('m.Close')}}</Button>
+        <Button type="primary" @click="hintVisible=false">Got it!</Button>
       </div>
     </Modal>
   </div>
@@ -289,7 +242,10 @@
         editorialLoading: false,
         editorialError: null,
         activePanel: 'info', // default panel
-        discussionMessage: ''
+        discussionMessage: '',
+        hintLoading: false,
+        hintVisible: false,
+        hintContent: ''
       }
     },
     beforeRouteEnter (to, from, next) {
@@ -627,6 +583,30 @@
             this.editorialError = 'Failed to load editorial. Please try again later.'
           }
         })
+      },
+      getAIHint () {
+        if (this.code.trim() === '') {
+          this.$error('Please write some code first so I can help you!')
+          return
+        }
+        this.hintLoading = true
+        let data = {
+          problem_id: this.problem._id,
+          code: this.code,
+          language: this.language,
+          question: this.discussionMessage // optional: use discussion input as context
+        }
+        api.getProblemHint(data).then(res => {
+          this.hintLoading = false
+          // Simple markdown to html conversion (basic) or just display text
+          // Since we have v-katex and markdown-body, we can try to render it.
+          // For now, let's just wrap in p tags if it's plain text, or rely on existing markdown renderers if available.
+          // Actually, let's just use a simple replace for newlines to br for now if not using a full renderer
+          this.hintContent = res.data.data.replace(/\n/g, '<br>')
+          this.hintVisible = true
+        }, _ => {
+          this.hintLoading = false
+        })
       }
     },
     computed: {
@@ -674,146 +654,161 @@
 </script>
 
 <style lang="less" scoped>
-  .card-title {
-    margin-left: 8px;
-  }
-
-  .flex-container {
+  .split-container {
     display: flex;
-    align-items: flex-start;
-    #problem-main {
-      flex: auto;
-      margin-right: 18px;
-    }
-    #right-column {
-      flex: none;
-      width: 220px;
-      position: sticky;
-      top: 90px; // keep entire right column fixed under navbar
-      align-self: flex-start;
-      max-height: calc(100vh - 100px);
-      overflow: auto;
+    flex-direction: row;
+    height: calc(100vh - 80px); /* Occupy full height minus navbar */
+    width: 100%;
+    overflow: hidden;
+    padding: 10px;
+    gap: 10px;
+  }
+
+  #problem-left {
+    flex: 0 0 40%; /* 40% width */
+    height: 100%;
+    overflow-y: auto;
+    min-width: 350px;
+  }
+
+  #problem-right {
+    flex: 1; /* Remaining space */
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .full-height-card {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    /deep/ .ivu-card-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px;
     }
   }
 
-    #problem-content {
-    margin-top: -50px;
-    .title {
-      font-size: 14px;
-      font-weight: 700;
-      margin: 25px 0 8px 0;
-      color: var(--nexus-primary);
-      text-transform: uppercase;
-      .copy {
-        padding-left: 8px;
-      }
-    }
-    p.content {
-      margin-left: 25px;
-      margin-right: 20px;
-      font-size: 15px
-    }
-    .sample {
-      align-items: stretch;
-      &-input, &-output {
-        width: 50%;
-        flex: 1 1 auto;
-        display: flex;
-        flex-direction: column;
-        margin-right: 5%;
-      }
-      pre {
-        flex: 1 1 auto;
-        align-self: stretch;
-        border-style: solid;
-        background: transparent;
-      }
-    }
-    .editorial-section {
-      margin-top: 20px;
+  .editor-card {
+    /deep/ .ivu-card-body {
+      padding: 0;
+      display: flex;
+      flex-direction: column;
     }
   }
 
-  #submit-code {
-    margin-top: 20px;
-    margin-bottom: 20px;
-    .status {
-      float: left;
+  .editor-header {
+    padding: 10px 15px;
+    border-bottom: 1px solid #eee;
+    background: #f8f9fa;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    
+    .lang-select, .theme-select {
+      margin-right: 15px;
       span {
-        margin-right: 10px;
-        margin-left: 10px;
-      }
-    }
-    .captcha-container {
-      display: inline-block;
-      .captcha-code {
-        width: auto;
-        margin-top: -20px;
-        margin-left: 20px;
+        margin-right: 5px;
+        font-weight: bold;
       }
     }
   }
 
-  #info {
+  .editor-container {
+    flex: 1;
+    overflow: hidden;
+    position: relative;
+    /* Force CodeMirror to take full height */
+    /deep/ .CodeMirror {
+      height: 100% !important;
+    }
+  }
+
+  .editor-footer {
+    padding: 10px 15px;
+    border-top: 1px solid #eee;
+    background: #fff;
+  }
+
+  .header-title {
+    font-size: 22px;
+    font-weight: bold;
     margin-bottom: 20px;
-    margin-top: 20px;
+    color: #333;
+  }
+
+  #problem-content {
+    .title {
+      font-size: 16px;
+      font-weight: 600;
+      margin: 20px 0 10px 0;
+      color: #409EFF;
+    }
+    .content {
+      font-size: 14px;
+      line-height: 1.6;
+    }
+  }
+
+  .sample {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 15px;
+    align-items: stretch;
+    
+    &-input, &-output {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+    }
+    pre {
+      flex: 1;
+      padding: 10px;
+      background: #f7f7f7;
+      border-radius: 4px;
+      font-family: monospace;
+      white-space: pre-wrap;
+    }
+  }
+
+  .info-content {
     ul {
-      list-style-type: none;
+      list-style: none;
+      padding: 0;
       li {
-        border-bottom: 1px dotted #e9eaec;
-        margin-bottom: 10px;
-        p {
-          display: inline-block;
+        display: flex;
+        justify-content: space-between;
+        padding: 10px 0;
+        border-bottom: 1px dashed #eee;
+        &:last-child {
+          border-bottom: none;
         }
         p:first-child {
-          width: 90px;
-        }
-        p:last-child {
-          float: right;
+          font-weight: bold;
+          color: #666;
         }
       }
     }
   }
 
-  .fl-right {
-    float: right;
-  }
-
-  #pieChart {
-    .echarts {
-      height: 250px;
-      width: 210px;
+  /* Dark mode overrides */
+  :global(.dark-mode) {
+    .editor-header, .editor-footer {
+      background: #2d2d2d;
+      border-color: #444;
     }
-    #detail {
-      position: absolute;
-      right: 10px;
-      top: 10px;
+    .header-title {
+      color: #eee;
     }
-  }
-
-  #pieChart-detail {
-    margin-top: 20px;
-    width: 500px;
-    height: 480px;
-  }
-
-  /* Toggle buttons layout: 2x2 grid and spacing to content (gap before dropdowns/sections) */
-  .contest-actions {
-    margin-bottom: 16px;
-  }
-  .toggle-buttons {
-    margin-bottom: 20px; /* gap between buttons and the panels below */
-    /* no need sticky here since whole column is sticky */
-    z-index: 10;
-    background: transparent; /* avoid covering content visually */
-  }
-  .grid-2x2 {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    grid-gap: 12px;
-  }
-  .toggle-btn {
-    width: 100%;
+    .sample pre {
+      background: #333;
+      color: #eee;
+    }
+    .info-content li {
+      border-bottom-color: #444;
+      p:first-child {
+        color: #aaa;
+      }
+    }
   }
 </style>
-

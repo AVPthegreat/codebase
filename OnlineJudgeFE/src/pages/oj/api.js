@@ -59,6 +59,21 @@ export default {
       data: profile
     })
   },
+  getSubmissionHeatmap (username) {
+    return ajax('submission_heatmap', 'get', {
+      data: {
+        username
+      }
+    })
+  },
+  getProblemHint (data) {
+    return ajax('problem/hint', 'post', {
+      data
+    })
+  },
+  getDailyChallenge () {
+    return ajax('problem/daily_challenge', 'get')
+  },
   freshDisplayID (userID) {
     return ajax('profile/fresh_display_id', 'get', {
       params: {

@@ -4,7 +4,6 @@ from .models import Contest, ContestAnnouncement, ContestRuleType
 from .models import ContestAttempt, ContestAttemptProblemStat
 from .models import ACMContestRank, OIContestRank
 
-
 class CreateConetestSeriaizer(serializers.Serializer):
     title = serializers.CharField(max_length=128)
     description = serializers.CharField()
@@ -119,7 +118,6 @@ class ContestAttemptProblemStatSerializer(serializers.ModelSerializer):
     class Meta:
         model = ContestAttemptProblemStat
         fields = ['problem_id', '_id', 'problem_title', 'attempts', 'best_result', 'passed_cases', 'total_cases', 'score']
-
 
 class ContestAttemptSerializer(serializers.ModelSerializer):
     problem_stats = ContestAttemptProblemStatSerializer(many=True, read_only=True)

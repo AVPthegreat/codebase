@@ -118,3 +118,82 @@ class ContestProblemAPI(APIView):
         else:
             data = ProblemSafeSerializer(contest_problems, many=True).data
         return self.success(data)
+
+
+class ProblemHintAPI(APIView):
+    def post(self, request):
+        data = request.data
+        problem_id = data.get("problem_id")
+        code = data.get("code")
+        language = data.get("language")
+        question = data.get("question")
+        
+        if not problem_id or not code:
+            return self.error("Problem ID and code are required")
+
+        try:
+            problem = Problem.objects.get(_id=problem_id, visible=True)
+        except Problem.DoesNotExist:
+            return self.error("Problem does not exist")
+
+        import google.generativeai as genai
+        from django.conf import settings
+
+        if not settings.GEMINI_API_KEY:
+            return self.error("AI service is not configured")
+
+        genai.configure(api_key=settings.GEMINI_API_KEY)
+        model = genai.GenerativeModel('gemini-pro')
+
+        prompt = f"""
+        You are an expert coding tutor. A student is working on a competitive programming problem.
+        
+        Problem Title: {problem.title}
+        Problem Description: {problem.description}
+        Input Description: {problem.input_description}
+        Output Description: {problem.output_description}
+        
+        Student's Code ({language}):
+        ```
+        {code}
+        ```
+        
+        Student's Question/Context: {question if question else "I'm stuck, please give me a hint without revealing the full solution."}
+        
+        Please provide a helpful, encouraging hint. Do NOT write the full correct code. Focus on logic, edge cases, or syntax errors if present. Keep it concise (under 200 words).
+        """
+
+        try:
+            response = model.generate_content(prompt)
+            return self.success(response.text)
+        except Exception as e:
+            return self.error(str(e))
+
+
+class DailyChallengeAPI(APIView):
+    def get(self, request):
+        from django.utils import timezone
+        from .models import DailyChallenge
+        import random
+        
+        today = timezone.now().date()
+        
+        try:
+            challenge = DailyChallenge.objects.get(date=today)
+        except DailyChallenge.DoesNotExist:
+            # Pick a random public problem that is not in a contest
+            problems = Problem.objects.filter(contest_id__isnull=True, visible=True)
+            count = problems.count()
+            if count == 0:
+                return self.error("No problems available for daily challenge")
+            
+            random_problem = problems[random.randint(0, count - 1)]
+            challenge = DailyChallenge.objects.create(problem=random_problem, date=today)
+            
+        data = {
+            "problem_id": challenge.problem._id,
+            "title": challenge.problem.title,
+            "difficulty": challenge.problem.difficulty,
+            "date": str(challenge.date)
+        }
+        return self.success(data)

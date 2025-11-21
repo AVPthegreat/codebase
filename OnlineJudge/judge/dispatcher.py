@@ -11,7 +11,7 @@ from account.models import User
 from conf.models import JudgeServer
 from contest.models import ContestRuleType, ACMContestRank, OIContestRank, ContestStatus
 from options.options import SysOptions
-from problem.models import Problem, ProblemRuleType
+from problem.models import Problem, ProblemRuleType, ProblemDifficulty
 from problem.utils import parse_problem_template
 from submission.models import JudgeStatus, Submission
 from utils.cache import cache
@@ -262,18 +262,36 @@ class JudgeDispatcher(DispatcherBase):
             user = User.objects.select_for_update().get(id=self.submission.user_id)
             user_profile = user.userprofile
             user_profile.submission_number += 1
+
+            # XP Calculation
+            xp_map = {ProblemDifficulty.Low: 10, ProblemDifficulty.Mid: 30, ProblemDifficulty.High: 50}
+            xp_to_award = xp_map.get(problem.difficulty, 10)
+            
+            # Check for Daily Challenge Bonus
+            from django.utils import timezone
+            from problem.models import DailyChallenge
+            today = timezone.now().date()
+            try:
+                daily_challenge = DailyChallenge.objects.get(date=today)
+                if daily_challenge.problem_id == problem.id:
+                    xp_to_award *= 2
+            except DailyChallenge.DoesNotExist:
+                pass
+
             if problem.rule_type == ProblemRuleType.ACM:
                 acm_problems_status = user_profile.acm_problems_status.get("problems", {})
                 if problem_id not in acm_problems_status:
                     acm_problems_status[problem_id] = {"status": self.submission.result, "_id": self.problem._id}
                     if self.submission.result == JudgeStatus.ACCEPTED:
                         user_profile.accepted_number += 1
+                        user_profile.xp += xp_to_award
                 elif acm_problems_status[problem_id]["status"] != JudgeStatus.ACCEPTED:
                     acm_problems_status[problem_id]["status"] = self.submission.result
                     if self.submission.result == JudgeStatus.ACCEPTED:
                         user_profile.accepted_number += 1
+                        user_profile.xp += xp_to_award
                 user_profile.acm_problems_status["problems"] = acm_problems_status
-                user_profile.save(update_fields=["submission_number", "accepted_number", "acm_problems_status"])
+                user_profile.save(update_fields=["submission_number", "accepted_number", "acm_problems_status", "xp"])
 
             else:
                 oi_problems_status = user_profile.oi_problems_status.get("problems", {})
@@ -285,6 +303,7 @@ class JudgeDispatcher(DispatcherBase):
                                                       "score": score}
                     if self.submission.result == JudgeStatus.ACCEPTED:
                         user_profile.accepted_number += 1
+                        user_profile.xp += xp_to_award
                 elif oi_problems_status[problem_id]["status"] != JudgeStatus.ACCEPTED:
                     # minus last time score, add this time score
                     user_profile.add_score(this_time_score=score,
@@ -293,8 +312,9 @@ class JudgeDispatcher(DispatcherBase):
                     oi_problems_status[problem_id]["status"] = self.submission.result
                     if self.submission.result == JudgeStatus.ACCEPTED:
                         user_profile.accepted_number += 1
+                        user_profile.xp += xp_to_award
                 user_profile.oi_problems_status["problems"] = oi_problems_status
-                user_profile.save(update_fields=["submission_number", "accepted_number", "oi_problems_status"])
+                user_profile.save(update_fields=["submission_number", "accepted_number", "oi_problems_status", "xp"])
 
     def update_contest_problem_status(self):
         with transaction.atomic():

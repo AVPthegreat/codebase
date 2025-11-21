@@ -103,6 +103,7 @@ class UserProfile(models.Model):
     accepted_number = models.IntegerField(default=0)
     # for OI
     total_score = models.BigIntegerField(default=0)
+    xp = models.BigIntegerField(default=0)
     submission_number = models.IntegerField(default=0)
 
     def add_accepted_problem_number(self):
