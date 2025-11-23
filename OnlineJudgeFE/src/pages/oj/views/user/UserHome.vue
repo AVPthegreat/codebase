@@ -78,31 +78,82 @@
 
       <!-- Right Column: Main Content -->
       <div class="col-content">
+
+
+        <!-- Stats Row -->
         <!-- Stats Row -->
         <div class="stats-row">
-          <Card :padding="16" class="stat-card">
-            <div class="stat-content">
-              <span class="stat-label">{{ $t('m.UserHomeSolved') }}</span>
-              <span class="stat-value">{{ profile.accepted_number }}</span>
+          <!-- Solved Card -->
+          <div class="stat-card solved-card">
+            <div class="stat-header">Solved Problems</div>
+            <div class="stat-body">
+              <div class="progress-circle-container">
+                <div class="progress-circle">
+                  <svg viewBox="0 0 36 36" class="circular-chart">
+                    <path class="circle-bg" d="M18 2.0845
+                        a 15.9155 15.9155 0 0 1 0 31.831
+                        a 15.9155 15.9155 0 0 1 0 -31.831" />
+                    <path class="circle" :stroke-dasharray="solvedPercentage + ', 100'" d="M18 2.0845
+                        a 15.9155 15.9155 0 0 1 0 31.831
+                        a 15.9155 15.9155 0 0 1 0 -31.831" />
+                  </svg>
+                  <div class="circle-content">
+                    <div class="solved-count">
+                      <span class="current">{{ profile.accepted_number }}</span>
+                      <span class="total">/{{ totalProblems }}</span>
+                    </div>
+                    <div class="solved-label">Solved</div>
+                  </div>
+                </div>
+              </div>
+              <div class="difficulty-stats">
+                <div class="diff-item">
+                  <span class="diff-label easy">Easy</span>
+                  <span class="diff-count">
+                    <span class="val">{{ solvedEasy }}</span>
+                    <span class="total">/{{ totalEasy }}</span>
+                  </span>
+                </div>
+                <div class="diff-item">
+                  <span class="diff-label medium">Med.</span>
+                  <span class="diff-count">
+                    <span class="val">{{ solvedMid }}</span>
+                    <span class="total">/{{ totalMid }}</span>
+                  </span>
+                </div>
+                <div class="diff-item">
+                  <span class="diff-label hard">Hard</span>
+                  <span class="diff-count">
+                    <span class="val">{{ solvedHard }}</span>
+                    <span class="total">/{{ totalHard }}</span>
+                  </span>
+                </div>
+              </div>
             </div>
-            <Icon type="checkmark-circled" size="24" color="#19be6b" class="stat-icon"></Icon>
-          </Card>
-          <Card :padding="16" class="stat-card">
-            <div class="stat-content">
-              <span class="stat-label">{{ $t('m.UserHomeserSubmissions') }}</span>
-              <span class="stat-value">{{ profile.submission_number }}</span>
-            </div>
-            <Icon type="ios-paper" size="24" color="#2d8cf0" class="stat-icon"></Icon>
-          </Card>
-          <Card :padding="16" class="stat-card">
-            <div class="stat-content">
-              <span class="stat-label">{{ $t('m.UserHomeScore') }}</span>
-              <span class="stat-value">{{ profile.total_score }}</span>
-            </div>
-            <Icon type="trophy" size="24" color="#ff9900" class="stat-icon"></Icon>
-          </Card>
-        </div>
+          </div>
 
+          <!-- Stats Card -->
+          <div class="stat-card stats-card">
+            <div class="stat-header">Stats Overview</div>
+            <div class="stat-body">
+              <div class="stats-grid">
+                <div class="stat-item">
+                  <div class="stat-label">Total Submissions</div>
+                  <div class="stat-value">{{ profile.submission_number }}</div>
+                  <div class="stat-subtext">All time submissions</div>
+                </div>
+                <div class="stat-item">
+                  <div class="stat-label">Acceptance Rate</div>
+                  <div class="stat-value">{{ acceptanceRate }}%</div>
+                  <div class="stat-subtext">Ratio of accepted submissions</div>
+                </div>
+              </div>
+              <div class="badges-placeholder">
+                <!-- Placeholder for future badges -->
+              </div>
+            </div>
+          </div>
+        </div>
         <!-- Heatmap Section -->
         <div class="content-section">
           <div class="section-header">
@@ -127,10 +178,10 @@
               </div>
               <div class="sub-meta">
                 <span :class="['status-text', getStatusClass(submission.result)]">{{ getStatusText(submission.result)
-                }}</span>
-                <span class="separator">•</span>
+                  }}</span>
+                <!-- <span class="separator">•</span> -->
                 <span class="sub-lang">{{ submission.language }}</span>
-                <span class="separator">•</span>
+                <!-- <span class="separator">•</span> -->
                 <span class="sub-time">{{ formatTime(submission.create_time) }}</span>
               </div>
             </div>
@@ -148,7 +199,7 @@
               v-if="refreshVisible">Sync</Button>
           </div>
           <div class="problems-list" v-if="problems.length">
-            <Button type="ghost" size="small" shape="circle" v-for="problemID of problems" :key="problemID"
+            <Button type="ghost" size="small" v-for="problemID of problems" :key="problemID"
               @click="goProblem(problemID)" class="problem-tag">
               {{ problemID }}
             </Button>
@@ -218,7 +269,14 @@ export default {
       submissions: [],
       codeModalVisible: false,
       currentSubmission: {},
-      loadingSubmission: false
+      loadingSubmission: false,
+      totalProblems: 0,
+      totalEasy: 0,
+      totalMid: 0,
+      totalHard: 0,
+      solvedEasy: '-',
+      solvedMid: '-',
+      solvedHard: '-'
     }
   },
   mounted() {
@@ -233,6 +291,7 @@ export default {
         this.profile = res.data.data
         this.getSolvedProblems()
         this.getRecentSubmissions()
+        this.getProblemStats()
       })
     },
     getSolvedProblems() {
@@ -256,6 +315,46 @@ export default {
       }
       api.getSubmissionList(0, 50, params).then(res => {
         this.submissions = res.data.data.results
+      })
+    },
+    getProblemStats() {
+      // Fetch all problems to calculate stats
+      // Using a large limit to ensure we get all problems for accurate stats
+      api.getProblemList(0, 1000).then(res => {
+        const allProblems = res.data.data.results
+        this.totalProblems = res.data.data.total
+
+        let tEasy = 0
+        let tMid = 0
+        let tHard = 0
+        const difficultyMap = {}
+
+        allProblems.forEach(p => {
+          difficultyMap[p._id] = p.difficulty
+          if (p.difficulty === 'Low') tEasy++
+          else if (p.difficulty === 'Mid') tMid++
+          else if (p.difficulty === 'High') tHard++
+        })
+
+        this.totalEasy = tEasy
+        this.totalMid = tMid
+        this.totalHard = tHard
+
+        // Calculate solved by difficulty
+        let sEasy = 0
+        let sMid = 0
+        let sHard = 0
+
+        this.problems.forEach(pid => {
+          const diff = difficultyMap[pid]
+          if (diff === 'Low') sEasy++
+          else if (diff === 'Mid') sMid++
+          else if (diff === 'High') sHard++
+        })
+
+        this.solvedEasy = sEasy
+        this.solvedMid = sMid
+        this.solvedHard = sHard
       })
     },
     goProblem(problemID) {
@@ -348,7 +447,8 @@ export default {
     },
     getGithubUsername(url) {
       if (!url) return ''
-      return url.split('/').pop()
+      const cleanUrl = url.endsWith('/') ? url.slice(0, -1) : url
+      return cleanUrl.split('/').pop()
     }
   },
   computed: {
@@ -377,7 +477,16 @@ export default {
       if (color === '#19be6b') return 'success'
       if (color === '#ed4014') return 'error'
       if (color === '#ff9900') return 'warning'
+      if (color === '#ff9900') return 'warning'
       return 'default'
+    },
+    solvedPercentage() {
+      if (!this.totalProblems) return 0
+      return (this.profile.accepted_number / this.totalProblems) * 100
+    },
+    acceptanceRate() {
+      if (!this.profile.submission_number) return 0
+      return ((this.profile.accepted_number / this.profile.submission_number) * 100).toFixed(2)
     }
   },
   watch: {
@@ -393,30 +502,44 @@ export default {
 <style lang="less" scoped>
 .dashboard-container {
   width: 100%;
-  min-height: 100vh;
-  background: #fff;
+  //i want to shift dashboard container upwards
+  margin-top: -37px;
+  // width: calc(100% - 32px);
+  // min-height: 100vh;
+  // background: #ffffff;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
 }
 
 // Secondary Navbar
 .secondary-navbar {
-  border-bottom: 1px solid #d0d7de;
-  background: #f6f8fa;
+  // border-top: 1px solid #d0d7de;
+  background: #F3F4F6;
   margin-bottom: 32px;
+  margin-top: 10px;
+  border: none !important;
   position: sticky;
-  top: 0;
+  top: 66px;
   z-index: 100;
+  width: 100%; // Full width to match navbar
+  // background-color: red !important;
+  left: 0;
+  right: 0;
+  // border-top: 1px solid #a0a6b2;
 
   .nav-content {
-    // max-width: 1280px;
-    // max-width: 100%;
     width: 100%;
-    // margin: 0 auto;
+    max-width: 1280px;
+    margin: 0 auto;
     padding: 0 32px;
     display: flex;
     gap: 8px;
 
+
     .nav-item {
-      padding: 16px 8px;
+      //i want font in uppercase
+
+      text-transform: uppercase;
+      padding: 16px 28px;
       font-size: 14px;
       color: #24292f;
       cursor: pointer;
@@ -428,6 +551,7 @@ export default {
 
       &:hover {
         background: rgba(208, 215, 222, 0.32);
+        border-radius: 20px;
       }
 
       &.active {
@@ -453,12 +577,12 @@ export default {
 
 .dashboard-grid {
   display: grid;
-  grid-template-columns: 300px 1fr 320px;
+  grid-template-columns: 300px 1fr;
   gap: 32px;
-  // max-width: 100%;
-  padding: 0 32px;
-  // margin: 0 auto;
   width: 100%;
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 0 32px;
 }
 
 // Left Column: Profile Sidebar
@@ -601,54 +725,189 @@ export default {
 
   .stats-row {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: 1fr 1fr;
     gap: 24px;
-    // margin-bottom: 8px;
+    margin-bottom: 24px;
 
     .stat-card {
       border: 1px solid #d0d7de;
-      border-radius: 6px;
-      box-shadow: none;
+      border-radius: 8px;
+      background: #fff;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      height: 100%;
 
-      :deep(.ivu-card-body) {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: 16px;
+      .stat-header {
+        padding: 16px 20px;
+        font-size: 14px;
+        font-weight: 600;
+        color: #57606a;
+        background: #f6f8fa;
+        border-bottom: 1px solid #d0d7de;
       }
 
-      .stat-content {
+      .stat-body {
+        padding: 20px;
+        flex: 1;
         display: flex;
-        flex-direction: column;
+        align-items: center;
+      }
 
-        .stat-label {
-          font-size: 12px;
-          color: #57606a;
-          text-transform: uppercase;
-          letter-spacing: 0.5px;
+      &.solved-card {
+        .stat-body {
+          justify-content: space-between;
+          gap: 24px;
         }
 
-        .stat-value {
-          font-size: 24px;
-          font-weight: 600;
-          color: #24292f;
-          line-height: 1.2;
+        .progress-circle-container {
+          position: relative;
+          width: 100px;
+          height: 100px;
+        }
+
+        .circular-chart {
+          display: block;
+          margin: 0 auto;
+          max-width: 100%;
+          max-height: 100%;
+        }
+
+        .circle-bg {
+          fill: none;
+          stroke: #eee;
+          stroke-width: 2.5;
+        }
+
+        .circle {
+          fill: none;
+          stroke: #ffa116;
+          stroke-width: 2.5;
+          stroke-linecap: round;
+          animation: progress 1s ease-out forwards;
+        }
+
+        .circle-content {
+          position: absolute;
+          top: 50%;
+          left: 50%;
+          transform: translate(-50%, -50%);
+          text-align: center;
+        }
+
+        .solved-count {
+          .current {
+            font-size: 20px;
+            font-weight: 700;
+            color: #24292f;
+          }
+
+          .total {
+            font-size: 12px;
+            color: #57606a;
+          }
+        }
+
+        .solved-label {
+          font-size: 12px;
+          color: #57606a;
+          margin-top: -2px;
+        }
+
+        .difficulty-stats {
+          flex: 1;
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+
+          .diff-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 13px;
+
+            .diff-label {
+              font-weight: 500;
+
+              &.easy {
+                color: #19be6b;
+              }
+
+              &.medium {
+                color: #ff9900;
+              }
+
+              &.hard {
+                color: #ed4014;
+              }
+            }
+
+            .diff-count {
+              .val {
+                font-weight: 600;
+                color: #24292f;
+              }
+
+              .total {
+                color: #8b949e;
+                font-size: 12px;
+              }
+            }
+          }
+        }
+      }
+
+      &.stats-card {
+        .stat-body {
+          flex-direction: column;
+          align-items: flex-start;
+        }
+
+        .stats-grid {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 24px;
+          width: 100%;
+        }
+
+        .stat-item {
+          .stat-label {
+            font-size: 12px;
+            color: #57606a;
+            margin-bottom: 4px;
+          }
+
+          .stat-value {
+            font-size: 24px;
+            font-weight: 600;
+            color: #24292f;
+          }
+
+          .stat-subtext {
+            font-size: 12px;
+            color: #8b949e;
+          }
         }
       }
     }
   }
+
+
 
   .content-section {
     .section-header {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-bottom: 8px;
+      margin-bottom: 1px;
 
       .section-title {
-        font-size: 16px;
+        font-size: 18px;
         font-weight: 400;
-        color: #24292f;
+        color: #000;
+        text-transform: capitalize;
+        font-weight: 700;
+        margin-top: -40px;
       }
     }
 
@@ -656,35 +915,35 @@ export default {
       border: 1px solid #d0d7de;
       border-radius: 6px;
       padding: 24px;
-      background: #fff;
+      // background: #f3f4f6 !important;
+      background-color: #fff;
+      margin-bottom: 30px;
     }
   }
 
   .submissions-scroll-container {
-    // display: flex;
-    // overflow-x: auto;
-    // gap: 16px;
-    // padding-bottom: 12px;
-    display: flex;
-    flex-direction: column;
-    max-height: 4 * 45px;
-    overflow-x: auto;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
     gap: 16px;
+    max-height: 220px; // Approx height for 2 rows (adjust based on card height)
+    overflow-y: auto;
+    padding-bottom: 4px; // Avoid cutting off shadow
 
-
+    // Hide scrollbar for Chrome, Safari and Opera
     &::-webkit-scrollbar {
-      height: 8px;
+      display: none;
     }
 
-    &::-webkit-scrollbar-thumb {
-      background: #d0d7de;
-      border-radius: 4px;
-    }
+    // Hide scrollbar for IE, Edge and Firefox
+    -ms-overflow-style: none;
+    /* IE and Edge */
+    scrollbar-width: none;
+    /* Firefox */
 
     .submission-card-compact {
-      min-width: 300px;
-      max-width: 300px;
-      padding: 16px;
+      width: 100%;
+      max-width: none;
+      padding: 20px;
       border: 1px solid #d0d7de;
       border-radius: 6px;
       background: #fff;
@@ -700,39 +959,36 @@ export default {
         margin-bottom: 8px;
         display: flex;
         justify-content: space-between;
-        align-items: flex-start;
+        align-items: center;
 
         .sub-title {
-          font-size: 14px;
+          font-size: 16px;
           font-weight: 600;
           color: #0969da;
           margin: 0;
-          line-height: 1.4;
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
-          max-width: 220px;
         }
 
         .sub-id {
-          font-size: 12px;
+          font-size: 14px;
           color: #57606a;
         }
       }
 
       .sub-meta {
-        font-size: 12px;
-        color: #57606a;
+        font-size: 14px;
+        color: #000;
         display: flex;
         align-items: center;
         flex-wrap: wrap;
+        gap: 12px; // Add spacing between items
 
-        .separator {
-          margin: 0 4px;
-        }
+        // .separator {
+        //   margin: 0 8px;
+        //   color: #d0d7de;
+        // }
 
         .status-text {
-          font-weight: 500;
+          font-weight: 600;
 
           &.status-accepted {
             color: #1a7f37;
@@ -838,16 +1094,18 @@ export default {
 
 // Dark Mode Support
 .dark-mode {
-  .dashboard-container {
-    background: #0d1117;
-  }
+  // .dashboard-container {
+  //   // background: #0d1117;
+  //   //nothing to write here
+
+  // }
 
   .secondary-navbar {
-    background: #010409;
-    border-bottom-color: #30363d;
+    background: #0C1222;
+    // border-bottom-color: #30363d;
 
     .nav-item {
-      color: #c9d1d9;
+      color: #fff;
 
       &:hover {
         background: rgba(177, 186, 196, 0.12);
@@ -883,7 +1141,7 @@ export default {
         }
 
         .username {
-          color: #8b949e;
+          color: #ffffff;
         }
       }
 
@@ -892,7 +1150,7 @@ export default {
       }
 
       .edit-profile-btn {
-        background: #21262d;
+        background: #0C1117;
         border-color: #30363d;
         color: #c9d1d9;
 
@@ -928,87 +1186,120 @@ export default {
 
   .col-content {
     .stat-card {
-      background: #0d1117;
+      background-color: #0C1117 !important;
       border-color: #30363d;
 
-      .stat-label {
-        color: #8b949e;
-      }
-
-      .stat-value {
-        color: #c9d1d9;
-      }
-    }
-
-    .content-section {
-      .section-title {
+      .stat-header {
+        background: #161b22;
+        border-bottom-color: #30363d;
         color: #c9d1d9;
       }
 
-      .heatmap-wrapper {
+      .stat-body {
         background: #0d1117;
-        border-color: #30363d;
+        color: #57606a !important;
+      }
+
+      &.solved-card {
+        .circle-bg {
+          stroke: #30363d;
+        }
+
+        .solved-count .current {
+          color: #c9d1d9;
+        }
+
+        .diff-item .diff-count .val {
+          color: #c9d1d9;
+        }
+      }
+
+      &.stats-card {
+        .stat-label {
+          color: #ffffff !important;
+        }
+
+        .stat-value {
+          color: #ffffff !important;
+        }
+
+        .stat-subtext {
+          color: #ffffff !important;
+        }
       }
     }
+  }
 
-    .submission-card-compact {
+  .content-section {
+    .section-title {
+      color: #c9d1d9 !important;
+    }
+
+    .heatmap-wrapper {
       background: #0d1117;
       border-color: #30363d;
+    }
+  }
 
-      &:hover {
-        border-color: #58a6ff;
-      }
+  .submission-card-compact {
+    background-color: #0C1117 !important;
+    border-color: #30363d !important;
 
-      .sub-title {
-        color: #58a6ff;
-      }
-
-      .sub-id,
-      .sub-meta {
-        color: #8b949e;
-      }
+    &:hover {
+      border-color: #58a6ff;
     }
 
-    .empty-state {
-      border-color: #30363d;
+    .sub-title {
+      color: #58a6ff;
+    }
+
+    .sub-id {
       color: #8b949e;
     }
-  }
 
-  .code-container {
-    background: #0d1117;
-    border-color: #30363d;
+    .sub-meta {
+      color: #c9d1d9; // Make text visible in dark mode
 
-    code {
-      color: #c9d1d9;
+      .sub-time {
+        color: #8b949e;
+      }
     }
   }
 
-  .submission-meta {
-    background: #0d1117;
+  .empty-state {
     border-color: #30363d;
+    color: #8b949e;
+  }
+}
 
-    .meta-item {
-      color: #c9d1d9;
+.code-container {
+  background: #0d1117;
+  border-color: #30363d;
 
-      strong {
-        color: #8b949e;
-      }
+  code {
+    color: #c9d1d9;
+  }
+}
+
+.submission-meta {
+  background: #0d1117;
+  border-color: #30363d;
+
+  .meta-item {
+    color: #c9d1d9;
+
+    strong {
+      color: #8b949e;
     }
   }
 }
 
+
 // Media Queries
 @media (max-width: 900px) {
   .dashboard-grid {
-    // grid-template-columns: 1fr;
-    // padding: 0 16px;
-    display: grid;
-    grid-template-columns: 300px 1fr 320px;
-    gap: 32px;
-    padding: 0 32px;
-    width: 100%;
-
+    grid-template-columns: 1fr;
+    padding: 0 16px;
   }
 
   .col-left .profile-sidebar {

@@ -171,34 +171,53 @@ export default {
 
   .oj-menu {
     position: fixed;
-    top: 16px;
+    // top: 16px;
     left: 50%;
     transform: translateX(-50%);
     z-index: 9999;
-    max-width: 1200px;
+    // width: 1200px;
     width: calc(100% - 32px);
     background: var(--nexus-surface);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
     border-radius: var(--nexus-radius-full);
-    border: 1px solid var(--nexus-border);
-    box-shadow: var(--nexus-shadow-lg);
+    // border: 1px solid var(--nexus-border);
+    // box-shadow: var(--nexus-shadow-lg);
     padding: 8px 24px;
     transition: var(--nexus-transition);
     display: flex !important;
     align-items: center;
     height: auto;
     line-height: normal;
+    // border-radius: 20px;
+    // border: 1px solid transparent;
+    // background: transparent;
+    // color: var(--nexus-text-primary);
+    // transition: var(--nexus-transition);
 
-    &:hover {
-      box-shadow: var(--nexus-shadow-lg);
-      border-color: var(--nexus-border-hover);
-    }
+    // &:hover {
+    //   background: rgba(208, 215, 222, 0.32);
+    //   border-radius: 20px;
+    // }
+
+    // &.active {
+    //   font-weight: 600;
+    //   border-bottom-color: #fd8c73;
+
+    //   i {
+    //     color: #57606a;
+    //   }
+    // }
+
+    // &:hover {
+    //   box-shadow: var(--nexus-shadow-lg);
+    //   border-color: var(--nexus-border-hover);
+    // }
   }
 
   .logo {
-    margin-right: 32px;
-    font-size: 20px;
+    margin-right: 12px;
+    font-size: 25px;
     font-weight: 700;
     letter-spacing: 0.05em;
     line-height: 50px;
@@ -266,7 +285,7 @@ export default {
 
     &:hover {
       color: var(--nexus-accent);
-      transform: rotate(15deg);
+      transform: rotate(360deg);
     }
   }
 }
@@ -274,7 +293,7 @@ export default {
 // Menu item styles
 :deep(.ivu-menu-item),
 :deep(.ivu-menu-submenu-title) {
-  font-size: 14px;
+  font-size: 180px;
   font-weight: 600;
   padding: 8px 16px;
   border-radius: var(--nexus-radius);
@@ -288,22 +307,27 @@ export default {
   text-transform: uppercase;
   border-bottom: 2px solid transparent;
 
-  &:hover {
-    background: var(--nexus-surface-hover);
-    color: var(--nexus-primary);
-  }
-
   .ivu-icon {
     margin-right: 6px;
     font-size: 18px;
   }
 }
 
+:deep(.ivu-menu-item:hover),
+:deep(.ivu-menu-submenu-title:hover) {
+  background: rgba(208, 215, 222, 0.32);
+  border-radius: 20px;
+  background-color: red;
+  transform: scale(1.5);
+}
+
 :deep(.ivu-menu-item-active),
 :deep(.ivu-menu-item-selected) {
-  background: rgba(79, 70, 229, 0.1);
+  background: transparent;
   color: var(--nexus-primary);
-  border-bottom: none !important;
+  font-weight: 600;
+  border-bottom: 2px solid #fd8c73 !important;
+  border-radius: 0;
 }
 
 :deep(.ivu-menu-horizontal) {
@@ -363,5 +387,41 @@ export default {
 
 #header .ivu-menu-light {
   background: transparent !important;
+}
+
+/* Base menu item styles */
+#header .ivu-menu-item,
+#header .ivu-menu-submenu-title {
+  font-size: 14px !important;
+  font-weight: 500 !important;
+  padding: 18px 16px !important;
+  margin: 0 4px !important;
+  border-radius: 8px !important;
+  transition: all 0.2s ease !important;
+  color: var(--nexus-text-secondary) !important;
+  text-transform: uppercase !important;
+  border-bottom: 2px solid transparent !important;
+}
+
+/* Hover styles for menu items */
+#header .ivu-menu-item:hover,
+#header .ivu-menu-submenu-title:hover {
+  background: rgba(208, 215, 222, 0.32) !important;
+  border-radius: 20px !important;
+}
+
+/* Active/Selected styles for menu items */
+#header .ivu-menu-item-active,
+#header .ivu-menu-item-selected,
+#header .ivu-menu-item.active,
+#header .ivu-menu-submenu-title.active {
+  background: transparent !important;
+  font-weight: 900 !important;
+  border-bottom: 2px solid #fd8c73 !important;
+}
+
+#header .ivu-menu-item.active i,
+#header .ivu-menu-submenu-title.active i {
+  color: #57606a !important;
 }
 </style>
